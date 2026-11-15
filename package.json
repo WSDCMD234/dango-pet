@@ -1,0 +1,74 @@
+{
+  "name": "dango-pet",
+  "productName": "万能团子",
+  "version": "2.1.0",
+  "description": "万能团子：住在扭蛋里的像素桌宠。能拎能甩，会陪你专注、帮你数 DDL，还能让 AI 捏一只新的。",
+  "main": "src/main.js",
+  "author": "dango-pet",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tools/test_core.js tools/test_mod.js",
+    "icon": "node tools/make_icon.js",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.dango.pet",
+    "productName": "万能团子",
+    "copyright": "MIT License",
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "dango-pet-win-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "万能团子",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "dango-pet-setup.${ext}"
+    },
+    "asar": true
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "zod": "^4.6.7"
+  }
+}

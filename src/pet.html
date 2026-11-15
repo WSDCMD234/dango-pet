@@ -1,0 +1,615 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>万能团子</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; user-select: none; }
+  #wrap { width: 128px; height: 128px; position: relative; cursor: grab; }
+  #wrap:active { cursor: grabbing; }
+  #hopper { position: absolute; left: 8px; top: 28px; width: 112px; height: 96px; transform-origin: 50% 100%; }
+  svg#pet { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; transform-origin: 50% 100%; transition: opacity .2s; }
+  svg#pet.hidden { opacity: 0; transition: none; }
+  #tail { transform-box: fill-box; transform-origin: 10% 100%; }
+  #earL { transform-box: fill-box; transform-origin: 90% 100%; }
+  #earR { transform-box: fill-box; transform-origin: 10% 100%; }
+  .idle #hopper, .sleep #hopper { animation: bob 2.4s ease-in-out infinite; }
+  .alert #hopper { animation: hop .9s ease-in-out infinite; }
+  .busy #hopper { animation: bob .5s ease-in-out infinite; }
+  .happy #hopper { animation: squash .5s ease-in-out 3; }
+  .sad #hopper { animation: none; transform: translateY(3px); }
+  .evolving #hopper, .entering #hopper, .cheer #hopper { animation: none !important; }
+  @keyframes bob { 50% { transform: translateY(-3px); } }
+  @keyframes hop { 0%, 60%, 100% { transform: translateY(0) scale(1, 1); } 20% { transform: translateY(0) scale(1.08, .9); } 40% { transform: translateY(-14px) scale(.95, 1.05); } }
+  @keyframes squash { 50% { transform: scale(1.1, .88); } }
+  .sleep #eyesOpen, .happy #eyesOpen { display: none; }
+  .idle #eyesClosed, .alert #eyesClosed, .busy #eyesClosed, .sad #eyesClosed, .focus #eyesClosed { display: none; }
+  .blink #eyesOpen { display: none; } .blink #eyesClosed { display: inline; }
+  .blink #capEyes { visibility: hidden; }
+  #mouthO { display: none; } .alert #mouthO { display: inline; } .alert #mouth { display: none; }
+  #sweat { display: none; } .sad #sweat { display: inline; }
+  /* 被拎着：张嘴；被甩飞：闭眼张嘴冒汗 */
+  .held #hopper, .fly #hopper { animation: none !important; }
+  .held #mouthO, .fly #mouthO { display: inline; } .held #mouth, .fly #mouth { display: none; }
+  .fly #eyesOpen { display: none; } .fly #eyesClosed { display: inline; } .fly #sweat { display: inline; }
+  /* 晕：闭眼冒汗 */
+  .dizzy #eyesOpen { display: none !important; } .dizzy #eyesClosed { display: inline !important; } .dizzy #sweat { display: inline !important; }
+  #flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; border-radius: 50%;
+    background: radial-gradient(circle at 50% 76%, #fff 0%, rgba(255,255,255,.9) 30%, rgba(255,255,255,0) 68%); }
+  #ring { position: absolute; left: 39px; top: 62px; width: 50px; height: 50px; border: 3px solid #fff; border-radius: 50%; box-sizing: border-box; opacity: 0; pointer-events: none; }
+  #fx { position: absolute; inset: 0; pointer-events: none; }
+  .p { position: absolute; width: 4px; height: 4px; }
+  /* 扭蛋：48×48，平时落在窗口底部 */
+  #orb { position: absolute; left: 40px; top: -52px; width: 48px; height: 48px; display: none; overflow: visible; shape-rendering: crispEdges; transform-origin: 50% 100%; }
+  #capTop { transform-box: fill-box; transform-origin: 8% 100%; }
+  #capGlow { opacity: 0; }
+  /* 头顶小物件 */
+  .deco { position: absolute; font: bold 14px/1 "Microsoft YaHei", sans-serif; pointer-events: none; }
+  #badge { display: none; right: 14px; top: 14px; min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box; border-radius: 11px; background: #e5484d; color: #fff; text-align: center; line-height: 22px; font-size: 13px; }
+  .alert #badge { display: block; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(1.15); } }
+  /* 专注计时：团子在外面时顶在头上，在扭蛋里时贴着扭蛋 */
+  #timer { display: none; left: 50%; top: 50px; transform: translateX(-50%); padding: 3px 8px; border-radius: 10px; background: #5a3a1e; color: #fff6e6; font: bold 13px/1 Consolas, "Microsoft YaHei", monospace; letter-spacing: .5px; white-space: nowrap; }
+  #timer.on { display: block; }
+  #timer.break { background: #4f9a3d; }
+  .out #timer { top: 6px; }
+  #gear { display: none; left: 54px; top: 6px; width: 20px; height: 20px; }
+  .busy #gear { display: block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #zzz { display: none; left: 92px; top: 12px; color: #8a8f98; }
+  .sleep #zzz { display: block; animation: float 2.4s ease-in-out infinite; }
+  .toss #zzz, .held #zzz, .fly #zzz { display: none !important; }
+  #heart { display: none; left: 56px; top: 4px; color: #e5484d; font-size: 18px; }
+  .happy #heart { display: block; animation: float 1.2s ease-out infinite; }
+  @keyframes float { 0% { transform: translateY(6px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-10px); opacity: 0; } }
+</style></head>
+<body>
+<div id="wrap" class="idle">
+  <svg id="orb" viewBox="0 0 12 12"></svg>
+  <div id="hopper"><svg id="pet" class="hidden" viewBox="0 0 28 24"></svg></div>
+  <div id="ring"></div>
+  <div id="flash"></div>
+  <div id="fx"></div>
+  <svg id="gear" class="deco" viewBox="0 0 20 20"><g fill="#3d7bfd"><rect x="8" y="0" width="4" height="20"/><rect x="0" y="8" width="20" height="4"/><rect x="3" y="3" width="14" height="14" rx="3"/></g><rect x="7" y="7" width="6" height="6" fill="#fff"/></svg>
+  <div id="zzz" class="deco">z<span style="font-size:11px">z</span></div>
+  <div id="heart" class="deco">♥</div>
+  <div id="badge" class="deco">1</div>
+  <div id="timer" class="deco"></div>
+</div>
+<script src="sprites.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const svg = $('pet'), wrap = $('wrap'), hopper = $('hopper'), fx = $('fx'), orb = $('orb');
+const NS = 'http://www.w3.org/2000/svg';
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rarity = (k) => (DANGO_FORMS[k] || DANGO_FORMS.dango).rarity;
+let form = 'dango', mood = 'idle', animating = false, started = false;
+let animKind = 'evolving', air = false, held = false, cheering = false;
+
+// 没事时团子待在扭蛋里不动；有事 / 点一下 / 专注时才出来
+let popFast = false, spin = 0, flying = false;
+let out = false, count = 0, chosen = 'random', next = 'dango', stay = false, band = false;
+let peekUntil = 0, peekForm = null, releaseAs = null, busy = false, lidAnim = null;
+let dizzy = false, dizzyNext = false, cheerNext = null, lastHard = false, flyPeak = 0, hitMax = 0, throws = [], angryUntil = 0, fidgeting = false;
+
+function setClass() {
+  wrap.className = mood + (animating ? ' ' + animKind : '') + (air ? ' fly' : held ? ' held' : '') + (flying ? ' toss' : '') + (dizzy ? ' dizzy' : '') + (cheering ? ' cheer' : '') + (out ? ' out' : '');
+}
+// 这只团子的几种代表色（放粒子用）
+function colors(k) {
+  const f = DANGO_FORMS[k] || DANGO_FORMS.dango, p = f.pal;
+  if (f.fx) return f.fx;
+  const body = p.b && p.b[0] === '#' ? p.b : '#ffffff';
+  return [body, p.l || '#ffffff', p.i || p.p || p.g || p.k || p.h || p.w || body, '#ffffff', '#fff6c8'];
+}
+const PARTY = ['#ff5f95', '#ffe066', '#7fd6ff', '#b9de8c', '#ffffff', '#ffa94d'];
+const GOLD = ['#ffd54a', '#fff3b0', '#ffffff', '#ffb020'];
+
+// 画团子；专注时给它绑一条红头带
+function paint(f) {
+  drawDango(svg, f);
+  if (!band) return;
+  const g = document.createElementNS(NS, 'g'); g.id = 'band';
+  const px = (x, y, w, c) => { const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w); r.setAttribute('height', 1); r.setAttribute('fill', c); g.appendChild(r); };
+  px(5, 11, 18, '#e5484d'); px(4, 12, 20, '#e5484d');
+  px(13, 11, 2, '#ffffff'); px(13, 12, 2, '#ffffff');               // 正中一个白点
+  px(2, 11, 2, '#b52f35'); px(1, 12, 3, '#b52f35'); px(1, 13, 1, '#b52f35'); px(3, 13, 1, '#b52f35'); px(0, 14, 1, '#b52f35');   // 脑后的结和飘带
+  svg.insertBefore(g, svg.querySelector('#eyesOpen'));
+}
+
+// ---------- 粒子 ----------
+// 从 (cx, cy) 向外炸开（out=true）或从外圈吸进来（out=false）
+function burst(n, cols, { cx = 64, cy = 88, r0 = 0, r1 = 60, dur = 700, size = 4, out = true } = {}) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd(-.2, .2), d1 = rnd(r1 * .6, r1);
+    const p = document.createElement('div'); p.className = 'p';
+    const s = Math.round(size * rnd(.7, 1.3)); p.style.width = p.style.height = s + 'px';
+    p.style.background = cols[i % cols.length]; p.style.left = (cx - s / 2) + 'px'; p.style.top = (cy - s / 2) + 'px';
+    fx.appendChild(p);
+    const A = `translate(${Math.cos(a) * r0}px, ${Math.sin(a) * r0}px) scale(1)`;
+    const B = `translate(${Math.cos(a) * d1}px, ${Math.sin(a) * d1 - (out ? 10 : 0)}px) scale(.3)`;
+    p.animate(out ? [{ transform: A, opacity: 1 }, { transform: B, opacity: 0 }] : [{ transform: B, opacity: 0 }, { transform: A, opacity: 1 }],
+      { duration: dur * rnd(.8, 1.2), easing: out ? 'cubic-bezier(.2,.7,.3,1)' : 'ease-in', fill: 'forwards' }).onfinish = () => p.remove();
+  }
+}
+// 原地闪的十字小星星
+const STAR = 'polygon(40% 0,60% 0,60% 40%,100% 40%,100% 60%,60% 60%,60% 100%,40% 100%,40% 60%,0 60%,0 40%,40% 40%)';
+function twinkle(n, cols, dur = 900) {
+  for (let i = 0; i < n; i++) setTimeout(() => {
+    const p = document.createElement('div'); p.className = 'p';
+    p.style.left = rnd(16, 108) + 'px'; p.style.top = rnd(24, 112) + 'px'; p.style.background = cols[i % cols.length];
+    p.style.clipPath = STAR; p.style.width = p.style.height = '9px'; fx.appendChild(p);
+    p.animate([{ transform: 'scale(0)', opacity: 1 }, { transform: 'scale(1.2)', opacity: 1, offset: .4 }, { transform: 'scale(0)', opacity: 0 }],
+      { duration: dur, easing: 'ease-out' }).onfinish = () => p.remove();
+  }, i * (dur / n) * .6);
+}
+function flash(dur = 500) { $('flash').animate([{ opacity: 0 }, { opacity: 1, offset: .15 }, { opacity: 0 }], { duration: dur, easing: 'ease-out' }); }
+function ring(dur = 600) { $('ring').animate([{ opacity: .9, transform: 'scale(.3)' }, { opacity: 0, transform: 'scale(2.4)' }], { duration: dur, easing: 'ease-out' }); }
+// 撒花：从头顶往下飘的彩色小方块
+function confetti(n) {
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement('div'); p.className = 'p'; p.style.background = PARTY[i % PARTY.length];
+    const s = Math.round(rnd(3, 5)); p.style.width = s + 'px'; p.style.height = s + 'px';
+    const x0 = rnd(10, 118); p.style.left = x0 + 'px'; p.style.top = rnd(-6, 14) + 'px'; fx.appendChild(p);
+    p.animate([{ transform: 'translate(0,0) rotate(0)', opacity: 1 }, { transform: `translate(${rnd(-16, 16)}px, ${rnd(70, 112)}px) rotate(${rnd(-300, 300)}deg)`, opacity: 1, offset: .8 }, { transform: `translate(${rnd(-18, 18)}px, ${rnd(100, 118)}px) rotate(${rnd(-360, 360)}deg)`, opacity: 0 }],
+      { duration: rnd(900, 1500), delay: rnd(0, 350), easing: 'cubic-bezier(.3,.2,.6,1)', fill: 'both' }).onfinish = () => p.remove();
+  }
+}
+
+// ---------- 扭蛋 ----------
+// 12×12 像素：下半实心底壳，上半玻璃罩，隔着玻璃能看见里面那只的脑袋；光标靠近它会睁眼看你
+let lid, capIn, capEyes, capGlow;
+function drawCapsule(key) {
+  orb.innerHTML = '';
+  const mk = (id) => { const g = document.createElementNS(NS, 'g'); g.id = id; orb.appendChild(g); return g; };
+  const bot = mk('capBot'); capIn = mk('capIn'); lid = mk('capTop'); capEyes = mk('capEyes'); capGlow = mk('capGlow');
+  const px = (g, p, c) => { const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', p.x); r.setAttribute('y', p.y); r.setAttribute('width', 1); r.setAttribute('height', 1); r.setAttribute('fill', c || p.c); g.appendChild(r); };
+  for (const p of capsulePixels(key, { style: capStyle() })) {
+    if (p.part === 'bot') { px(bot, p); if (p.c !== CAP_PAL.o) px(capGlow, p, '#ffffff'); }
+    else if (p.part === 'top') px(lid, p);
+    else px(p.eye ? capEyes : capIn, p);
+  }
+  capEyes.style.display = awakeNow ? '' : 'none';
+}
+// 扭蛋样式：自带的几种 + 团子包里带的
+let capId = 'orange', capExtra = {}, extraForms = new Set();
+const capStyle = () => DANGO_CAP_STYLES[capId] || capExtra[capId] || DANGO_CAP_STYLES.orange;
+// 样式换了：等手头的动画放完再重画，免得打断
+function redrawCapsule() { if (!started) return; if (animating || busy) return setTimeout(redrawCapsule, 500); drawCapsule(next); if (out) capInside(null); orb.style.transform = orb.style.transform || G; }
+// 换里面那只（null = 空的：团子在外面）
+function capInside(key) {
+  if (!capIn) return;
+  capIn.innerHTML = ''; capEyes.innerHTML = '';
+  if (!key) return;
+  for (const p of capsulePixels(key, { style: capStyle() })) if (p.part === 'in') {
+    const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', p.x); r.setAttribute('y', p.y); r.setAttribute('width', 1); r.setAttribute('height', 1); r.setAttribute('fill', p.c);
+    (p.eye ? capEyes : capIn).appendChild(r);
+  }
+}
+// 里面那只醒没醒、往哪边看（-1 左 / 0 中 / 1 右）
+let awakeNow = false;
+function awake(on, look = 0) {
+  awakeNow = on; if (!capEyes) return;
+  capEyes.style.display = on ? '' : 'none';
+  capEyes.setAttribute('transform', `translate(${look} 0)`);
+}
+// 底壳亮一下（白 = 眨一下；红 = 生气）
+function glint(color = '#ffffff', ms = 380) {
+  if (!capGlow) return;
+  for (const r of capGlow.children) r.setAttribute('fill', color);
+  return capGlow.animate([{ opacity: 0 }, { opacity: .85, offset: .25 }, { opacity: 0 }], { duration: ms, easing: 'ease-out' });
+}
+const G = 'translateY(128px)'; // 扭蛋落地位置
+async function wobble(n) {
+  for (let i = 0; i < n; i++) {
+    glint();
+    await orb.animate([{ transform: `${G} rotate(0)` }, { transform: `${G} rotate(-22deg)` }, { transform: `${G} rotate(16deg)` }, { transform: `${G} rotate(0)` }],
+      { duration: 400, easing: 'ease-in-out' }).finished;
+    if (i < n - 1) await sleep(240);
+  }
+}
+function openLid(ms = 140, deg = -62) { if (lidAnim) lidAnim.cancel(); lidAnim = lid.animate([{ transform: 'rotate(0)' }, { transform: `rotate(${deg}deg) translateY(-1px)` }], { duration: ms, easing: 'ease-out', fill: 'forwards' }); return lidAnim.finished; }
+function closeLid(ms = 140, deg = -62) { if (lidAnim) lidAnim.cancel(); lidAnim = null; return lid.animate([{ transform: `rotate(${deg}deg) translateY(-1px)` }, { transform: 'rotate(0)' }], { duration: ms, easing: 'ease-in' }).finished; }
+
+// 启动：扭蛋从上面转着掉下来，落地弹两下
+async function dropBall() {
+  animating = true; animKind = 'entering'; setClass();
+  orb.style.display = 'block'; svg.classList.add('hidden');
+  const a = orb.animate([
+    { transform: 'translateY(0) rotate(-200deg)', easing: 'cubic-bezier(.5,0,1,1)' },
+    { transform: `${G} scale(1.15, .85)`, offset: .5, easing: 'cubic-bezier(0,0,.5,1)' },
+    { transform: 'translateY(100px) rotate(0)', offset: .68, easing: 'cubic-bezier(.5,0,1,1)' },
+    { transform: `${G} scale(1.08, .92)`, offset: .84, easing: 'cubic-bezier(0,0,.5,1)' },
+    { transform: 'translateY(120px)', offset: .92, easing: 'cubic-bezier(.5,0,1,1)' },
+    { transform: G },
+  ], { duration: 950 });
+  await a.finished;
+  orb.style.transform = G;
+  animating = false; setClass();
+}
+
+// 开扭蛋：晃一晃、掀盖、「啵」地蹦出一只团子
+async function release(f) {
+  animating = true; animKind = 'entering'; setClass();
+  orb.style.display = 'block'; orb.style.opacity = 1;
+  capInside(f); awake(true);
+  hopper.style.transform = ''; hopper.style.transformOrigin = ''; tumble = 0; air = false;
+  if (popFast) { if (settle) { await settle.finished.catch(() => { }); settle = null; await sleep(150); } popFast = false; orb.style.transform = G; orb.style.transformOrigin = ''; spin = 0; }
+  else await wobble(count > 0 || stay ? 1 : 2);
+  await sleep(100);
+  await openLid();
+  api.send('pet-seen', f);
+  const rar = rarity(f), ssr = rar === 'SSR';
+  flash(ssr ? 900 : 480); ring(ssr ? 900 : 650);
+  burst(ssr ? 30 : 18, ssr ? GOLD : colors(f), { cy: 98, r1: ssr ? 86 : 68 });
+  capInside(null);
+  const fade = orb.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 240, fill: 'forwards' });
+  form = f; paint(f);
+  svg.classList.remove('hidden');
+  out = true; setClass(); api.send('pet-out', true); reportShape();
+  await svg.animate([
+    { transform: 'translateY(10px) scale(.12)', easing: 'cubic-bezier(.2,.8,.4,1)' },
+    { transform: 'translateY(-22px) scale(.9, 1.1)', offset: .42, easing: 'cubic-bezier(.5,0,.8,.4)' },
+    { transform: 'translateY(0) scale(1.15, .85)', offset: .72 },
+    { transform: 'translateY(-4px) scale(.97, 1.04)', offset: .87 },
+    { transform: 'scale(1)' }], { duration: 640 }).finished;
+  await fade.finished;
+  orb.style.display = 'none'; fade.cancel(); if (lidAnim) { lidAnim.cancel(); lidAnim = null; }
+  twinkle(rar === 'N' ? 5 : 10, ssr ? GOLD : colors(f));
+  await sleep(360);
+  animating = false; setClass();
+  if (dizzyNext) { dizzyNext = false; dizzyFx(); } else if (cheerNext) { const c = cheerNext; cheerNext = null; cheer(c.big); } else wagTail();
+}
+
+// 回扭蛋：扭蛋开着盖出现，团子蹲一下、跳起来扎进去，合盖；在里面又换了个样
+async function recall() {
+  animating = true; animKind = 'entering'; setClass();
+  orb.style.display = 'block'; capInside(null); awake(false);
+  openLid(1);
+  await orb.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200 }).finished;
+  const dive = svg.animate([
+    { transform: 'scale(1)' },
+    { transform: 'scale(1.12, .86)', offset: .24, easing: 'cubic-bezier(.2,.8,.4,1)' },
+    { transform: 'translateY(-26px) scale(.78, .96)', offset: .58, easing: 'cubic-bezier(.6,0,.9,.5)' },
+    { transform: 'translateY(6px) scale(.1)', opacity: .7 }], { duration: 540, fill: 'forwards' });
+  setTimeout(() => burst(8, colors(form), { cy: 102, r1: 38, dur: 300, out: false, size: 3 }), 320);
+  await dive.finished;
+  svg.classList.add('hidden'); dive.cancel();
+  out = false; setClass(); api.send('pet-out', false); reportShape();
+  capInside(form);
+  await closeLid();
+  await sleep(120);
+  const w = wobble(1);
+  setTimeout(() => capInside(next), 210);
+  await w;
+  animating = false; setClass();
+}
+
+async function reconcile() {
+  if (busy || !started || animating) return;
+  busy = true;
+  try {
+    for (let guard = 0; guard < 6; guard++) {
+      const wantOut = count > 0 || stay || Date.now() < peekUntil;
+      // 有待办时一律是原味团子；选了常驻形态就是它；否则谁出来了就是谁
+      const want = count > 0 ? 'dango' : (chosen !== 'random' ? chosen : null);
+      if (wantOut && !out) { const f = releaseAs || want || (Date.now() < peekUntil && peekForm) || next; releaseAs = null; await release(f); }
+      else if (!wantOut && out) await recall();
+      else if (wantOut && out && want && form !== want) await morph(want, count > 0 ? 'quick' : 'full');
+      else break;
+    }
+  } finally { busy = false; }
+}
+setInterval(reconcile, 800);
+function peek(f, ms) { peekForm = f; peekUntil = Date.now() + ms; reconcile(); }
+
+// ---------- 变身：像翻硬币一样转，每转半圈换一次样子，越转越快，最后「嘭」地停在新的那只 ----------
+const FLIPS = { full: [240, 200, 170, 140, 115, 95, 80], quick: [130, 100, 80] };
+async function morph(to, level) {
+  animating = true; animKind = 'evolving'; setClass();
+  const from = form, steps = FLIPS[level];
+  if (level !== 'quick') burst(16, ['#fff', '#fff6c8', '#ffe08a'], { cy: 82, r0: 0, r1: 64, dur: 480, out: false });
+  await svg.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.1, .88)' }, { transform: 'scale(.96, 1.06)' }], { duration: 260, easing: 'ease-in-out' }).finished;
+  for (let i = 0; i < steps.length; i++) {
+    const half = steps[i] / 2;
+    await svg.animate([{ transform: 'scale(.96, 1.06)' }, { transform: 'scale(.04, 1.08)' }], { duration: half, easing: 'ease-in' }).finished;
+    paint(i % 2 === 0 ? to : from);
+    await svg.animate([{ transform: 'scale(.04, 1.08)' }, { transform: 'scale(.96, 1.06)' }], { duration: half, easing: 'ease-out' }).finished;
+  }
+  paint(to); form = to; reportShape();
+  flash(level === 'quick' ? 300 : 520); ring(level === 'quick' ? 450 : 700);
+  burst(level === 'full' ? 24 : 12, colors(to), { r1: level === 'full' ? 76 : 56 });
+  await svg.animate([{ transform: 'scale(1.14, .84)' }, { transform: 'scale(.94, 1.07)', offset: .5 }, { transform: 'scale(1)' }], { duration: 380, easing: 'ease-out' }).finished;
+  if (level !== 'quick') twinkle(9, colors(to), 1000);
+  await sleep(level === 'quick' ? 200 : 600);
+  animating = false; setClass();
+  if (level !== 'quick') wagTail();
+}
+
+// ---------- 在外面时的小动作 ----------
+const part = (id) => svg.querySelector('#' + id);
+function wagTail() {
+  const t = part('tail'); if (!t || !t.firstChild) return twitchEar();
+  t.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(16deg)' }, { transform: 'rotate(-8deg)' }, { transform: 'rotate(14deg)' }, { transform: 'rotate(-6deg)' }, { transform: 'rotate(0)' }],
+    { duration: 1000, easing: 'ease-in-out' });
+}
+function twitchEar() {
+  const side = Math.random() < .5 ? 'earL' : 'earR', e = part(side), d = side === 'earL' ? -14 : 14; if (!e || !e.firstChild) return;
+  e.animate([{ transform: 'rotate(0)' }, { transform: `rotate(${d}deg)`, offset: .2 }, { transform: 'rotate(0)', offset: .4 }, { transform: `rotate(${d}deg)`, offset: .6 }, { transform: 'rotate(0)' }], { duration: 520 });
+}
+// 庆祝：原地蹦两下 + 撒花（专注完成 / 抽到隐藏款）
+async function cheer(big) {
+  if (!out || animating) { cheerNext = { big }; return; }
+  cheering = true; setClass();
+  confetti(big ? 34 : 16); if (big) twinkle(8, PARTY, 1100);
+  await hopper.animate([
+    { transform: 'translateY(0) scale(1)' }, { transform: 'translateY(0) scale(1.1, .88)', offset: .12 }, { transform: 'translateY(-20px) scale(.94, 1.07)', offset: .3 },
+    { transform: 'translateY(0) scale(1.1, .9)', offset: .5 }, { transform: 'translateY(-14px) scale(.96, 1.05)', offset: .68 }, { transform: 'translateY(0) scale(1.06, .94)', offset: .86 }, { transform: 'translateY(0) scale(1)' }],
+    { duration: 1100, easing: 'ease-out' }).finished.catch(() => { });
+  cheering = false; setClass(); wagTail();
+}
+// 隐藏款在外面的时候一直闪小星星
+setInterval(() => { if (out && !animating && rarity(form) === 'SSR') twinkle(2, GOLD, 800); }, 700);
+
+// ---------- 主进程状态 ----------
+api.on('pet', (s) => {
+  mood = s.mood; count = s.count; stay = !!s.stay;
+  if ((s.capsule || 'orange') !== capId) { capId = s.capsule || 'orange'; redrawCapsule(); }
+  $('badge').textContent = s.count > 9 ? '9+' : s.count;
+  if (!!s.band !== band) { band = !!s.band; if (out && !animating) paint(form); }
+  setTimer(s.timer);
+  const c = s.chosen || 'random';
+  if (s.next && s.next !== next) { next = s.next; if (started && !out && !animating) capInside(next); }
+  setClass();
+  if (!started) { started = true; chosen = c; drawCapsule(next); dropBall().then(reconcile); return; }
+  if (c !== chosen) {
+    // 图鉴里换了常驻形态：没事的话出来变给你看一眼，再回扭蛋
+    chosen = c;
+    if (count === 0 && c !== 'random' && !stay) { if (!out) releaseAs = form; peek(c, 8000); }
+  }
+  reconcile();
+});
+function setTimer(t) { const el = $('timer'); el.textContent = t ? t.text : ''; el.className = 'deco' + (t ? ' on ' + t.phase : ''); }
+api.on('pet-timer', setTimer);
+// 让它自己出来待一会儿（提醒时用）
+api.on('pet-peek', ({ ms, form: f }) => {
+  if (count > 0) return;
+  if (out) { peekUntil = Math.max(peekUntil, Date.now() + ms); return; }
+  if (animating || Date.now() < angryUntil) return;
+  if (f && DANGO_FORMS[f]) { releaseAs = f; capInside(f); }      // 指定这次出来的是谁（刚捏好的新团子）
+  peek(f && DANGO_FORMS[f] ? f : next, ms);
+});
+// 自带以外的团子和扭蛋样式（团子包 / AI 捏的）：主进程发过来，这边登记上才画得出来
+api.on('forms', ({ forms = {}, capsules = {} }) => {
+  for (const k of extraForms) if (!forms[k]) unregisterDango(k);
+  extraForms = new Set(Object.keys(forms));
+  for (const [k, d] of Object.entries(forms)) registerDango(k, d);
+  capExtra = capsules;
+  if (started && !out && !animating && !busy) { drawCapsule(next); orb.style.transform = orb.style.transform || G; }
+});
+api.on('pet-cheer', ({ big }) => cheer(big));
+
+// ---------- 被甩出去 ----------
+// 扭蛋：按滚动距离转（半径 24px）；停下时转到最近的正位并轻轻晃一下
+// 团子：闭眼张嘴在空中翻滚，速度越快拉得越长；落地压扁再弹回
+let lastFly = Date.now(), tumble = 0, settle = null, hitAt = 0, hitSide = '', hitAmp = 0;
+// 果冻回弹：先压扁、再反向拉长、来回几下衰减掉；amp 按撞击力度给（轻甩轻轻一扁，猛甩压成饼）
+function jelly(now) {
+  const t = now - hitAt; if (t > 700 || !hitAmp) return [1, 1];
+  const j = hitAmp * Math.exp(-t / 130) * Math.cos(t / 42);
+  const side = hitSide === 'left' || hitSide === 'right';
+  return side ? [1 - j, 1 + j * .8] : [1 + j, 1 - j];
+}
+function jellyT(now, half) {
+  const [sx, sy] = jelly(now);
+  const dx = hitSide === 'left' ? -half * (1 - sx) : hitSide === 'right' ? half * (1 - sx) : 0;
+  const dy = hitSide === 'bottom' ? half * (1 - sy) : hitSide === 'top' ? -half * (1 - sy) : 0;
+  return `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+}
+const norm = (a) => ((a % 360) + 360) % 360;
+api.on('pet-fly', ({ flying: f, vx, vy = 0 }) => {
+  const now = Date.now(), dt = Math.min(.05, (now - lastFly) / 1000); lastFly = now;
+  const was = flying; flying = f; if (was !== f) setClass();
+  if (f && !was) { held = false; stopDangle(); flyPeak = 0; hitMax = 0; }
+  if (f) flyPeak = Math.max(flyPeak, Math.hypot(vx, vy));
+  if (!f && was) { lastHard = hitMax > 2600 || flyPeak > 3600; if (flyPeak > 1500) { throws.push(now); throws = throws.filter(t => now - t < 30000); } } // 只算用力甩的
+  if (!out && !animating) {
+    if (f) { spin += vx * dt / 24 * 57.3; orb.style.transformOrigin = '50% 50%'; orb.style.transform = `${G} ${jellyT(now, 24)} rotate(${spin % 360}deg)`; }
+    else if (was) {
+      const a = norm(spin), to = a > 180 ? 360 : 0; spin = 0; orb.style.transformOrigin = ''; orb.style.transform = G;
+      settle = orb.animate([{ transformOrigin: '50% 50%', transform: `${G} rotate(${a}deg)` }, { transformOrigin: '50% 50%', transform: `${G} rotate(${to + (to - a) * .12}deg)`, offset: .7 }, { transformOrigin: '50% 50%', transform: `${G} rotate(${to}deg)` }],
+        { duration: 260 + Math.abs(to - a) * 2, easing: 'ease-out' });
+    }
+  } else if (animating) {
+    // 飞的途中团子刚好被放出来 / 收回去：落地时把翻滚残留清掉，免得一直歪着
+    if (!f && was) { tumble = 0; hopper.style.transform = ''; hopper.style.transformOrigin = ''; if (air) { air = false; setClass(); } }
+  } else {
+    if (f) {
+      if (!air) { air = true; setClass(); }
+      tumble += vx * dt * .35;
+      const s = Math.min(.2, Math.hypot(vx, vy) / 14000);
+      hopper.style.transformOrigin = '50% 60%';
+      // 撞墙 / 落地的压扁叠在翻滚外面（屏幕方向），不打断翻滚
+      hopper.style.transform = `${jellyT(now, 40)} rotate(${tumble % 360}deg) scale(${.84 - s * .5}, ${.84 + s * .8})`;
+    } else if (was) {
+      const a = norm(tumble), to = a > 180 ? 360 : 0; tumble = 0;
+      hopper.style.transform = ''; hopper.style.transformOrigin = '';
+      air = false; setClass();
+      hopper.animate([
+        { transformOrigin: '50% 60%', transform: `rotate(${a}deg) scale(.84)` },
+        { transformOrigin: '50% 100%', transform: `rotate(${to}deg) scale(1.25, .75)`, offset: .45 },
+        { transformOrigin: '50% 100%', transform: `rotate(${to}deg) translateY(-10px) scale(.92, 1.08)`, offset: .75 },
+        { transformOrigin: '50% 100%', transform: `rotate(${to}deg)` }], { duration: 520, easing: 'ease-out' });
+      setTimeout(() => lastHard ? dizzyFx() : wagTail(), 520);
+    }
+  }
+});
+// 被鼠标拎着：像挂在手上一样，往哪边拖身子就往反方向荡，松手后荡回来
+let hv = 0, ang = 0, angV = 0, dangling = false;
+function stopDangle() { dangling = false; ang = angV = 0; }
+api.on('pet-held', ({ on, vx }) => {
+  hv = vx || 0;
+  if (on !== held) { held = on; setClass(); }
+  if (dangling || flying || animating) return;
+  dangling = true; let last = performance.now();
+  const el = () => out ? hopper : orb;
+  const tick = (t) => {
+    if (!dangling || flying || animating) { dangling = false; return; }
+    const dt = Math.min(.05, Math.max(0, (t - last) / 1000)); last = t;
+    const target = held ? Math.max(-26, Math.min(26, hv * .02)) : 0;
+    angV += ((target - ang) * 140 - angV * 10) * dt; ang += angV * dt;
+    const e = el(); e.style.transformOrigin = e === orb ? '50% 0%' : '50% 12%';
+    e.style.transform = (e === orb ? G + ' ' : '') + `rotate(${ang}deg)`;
+    if (!held && Math.abs(ang) < .3 && Math.abs(angV) < 3) {
+      e.style.transformOrigin = ''; e.style.transform = e === orb ? G : '';
+      stopDangle(); return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+api.on('pet-hit', ({ side, impact }) => {
+  if (flying) {
+    hitMax = Math.max(hitMax, impact); hitAt = Date.now(); hitSide = side; hitAmp = Math.max(.1, Math.min(.45, impact / 4200));
+    // 撞得狠的在接触点崩几颗小星
+    if (impact > 1400) {
+      const c = out ? { left: [14, 80], right: [114, 80], top: [64, 30], bottom: [64, 124] }[side] : { left: [40, 100], right: [88, 100], top: [64, 76], bottom: [64, 124] }[side];
+      burst(Math.round(Math.min(9, impact / 400)), ['#ffffff', '#ffe08a', '#ffd0cc'], { cx: c[0], cy: c[1], r1: Math.min(34, impact / 90), dur: 380, size: 3 });
+    }
+    return;
+  }
+  if (out) hopper.animate([{ transform: side === 'left' || side === 'right' ? 'scale(.8, 1.1)' : 'scale(1.2, .8)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+});
+// 弹完力停稳了：扭蛋在原地打开，团子出来看看，过一会儿自己回去
+api.on('pet-land', () => {
+  if (out || animating || count > 0) return;
+  // 30 秒内用力甩满 5 次才生气，气 10 秒；生着气再甩只发抖、不延长
+  if (Date.now() < angryUntil) { sulk(); return; }
+  if (throws.length >= 5) { angryUntil = Date.now() + 10000; throws = []; sulk(); api.send('pet-event', 'sulk'); return; }
+  dizzyNext = lastHard; popFast = true; peek(next, 6000);
+});
+// 点一下扭蛋：开出一只团子，几秒后自己回去
+function pokeBall() {
+  if (count > 0 || out || animating) return;
+  if (Date.now() < angryUntil) return sulk();
+  peek(next, 5200);
+}
+
+// ---------- 生命力 ----------
+const settleRunning = () => !!(settle && (settle.playState === 'running' || settle.playState === 'paused'));
+const ballIdle = () => started && !out && !animating && !flying && !held && !dangling && !busy && !fidgeting && !sulking && !settleRunning();
+// 甩狠了：闭眼冒汗、左右摇晃，头顶小星星绕圈
+async function dizzyFx() {
+  if (!out) return;
+  dizzy = true; setClass(); api.send('pet-event', 'dizzy');
+  for (let i = 0; i < 3; i++) {
+    const p = document.createElement('div'); p.className = 'p'; p.style.background = '#ffd34d'; p.style.width = p.style.height = '5px';
+    p.style.clipPath = STAR; p.style.left = '62px'; p.style.top = '36px'; fx.appendChild(p);
+    const k = []; for (let j = 0; j <= 8; j++) { const a = (j / 8 + i / 3) * Math.PI * 2; k.push({ transform: 'translate(' + Math.cos(a) * 20 + 'px, ' + Math.sin(a) * 6 + 'px) scale(' + (1 + Math.sin(a) * .3) + ')' }); }
+    p.animate(k, { duration: 700, iterations: 3 }).onfinish = () => p.remove();
+  }
+  await hopper.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-10deg)' }, { transform: 'rotate(9deg)' }, { transform: 'rotate(-7deg)' }, { transform: 'rotate(5deg)' }, { transform: 'rotate(-3deg)' }, { transform: 'rotate(0)' }],
+    { duration: 2000, easing: 'ease-in-out' }).finished.catch(() => { });
+  dizzy = false; setClass();
+}
+// 生气：扭蛋气得发抖、底壳涨红、冒个红色怒气符号，就是不出来
+let sulking = false;
+async function sulk() {
+  if (sulking) return; sulking = true;
+  try {
+    if (settle) await settle.finished.catch(() => { });
+    awake(true);
+    const m = document.createElementNS(NS, 'svg'); m.setAttribute('viewBox', '0 0 7 7'); m.setAttribute('class', 'p'); m.style.width = m.style.height = '14px'; m.style.shapeRendering = 'crispEdges';
+    for (const [x, y, w, h] of [[0, 2, 3, 1], [2, 0, 1, 3], [4, 2, 3, 1], [4, 0, 1, 3], [0, 4, 3, 1], [2, 4, 1, 3], [4, 4, 3, 1], [4, 4, 1, 3]]) { const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w); r.setAttribute('height', h); r.setAttribute('fill', '#e5372f'); m.appendChild(r); }
+    m.style.left = '90px'; m.style.top = '66px'; fx.appendChild(m);
+    m.animate([{ transform: 'scale(0)' }, { transform: 'scale(1.3)', offset: .2 }, { transform: 'scale(1)', offset: .35 }, { transform: 'scale(1.15)', offset: .6 }, { transform: 'scale(0)' }], { duration: 1300 }).onfinish = () => m.remove();
+    glint('#ff3b30', 900);
+    await orb.animate([0, 8, -8, 7, -7, 6, -6, 4, -4, 0].map(a => ({ transform: G + ' translateX(' + a / 4 + 'px) rotate(' + a + 'deg)' })), { duration: 600 }).finished;
+    await sleep(200);
+  } finally { sulking = false; }
+}
+// 盖子掀条缝，里面那只探头眨一下眼（ms 后合上）
+async function crack(ms) {
+  fidgeting = true;
+  try {
+    awake(true);
+    const rise = [capIn, capEyes].map(g => g.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-1px)' }], { duration: 200, fill: 'forwards' }));
+    if (lidAnim) lidAnim.cancel();
+    lidAnim = lid.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-30deg) translateY(-1px)' }], { duration: 260, easing: 'ease-out', fill: 'forwards' });
+    await lidAnim.finished.catch(() => { });
+    await sleep(ms * .5); capEyes.style.opacity = 0; await sleep(130); capEyes.style.opacity = 1; await sleep(ms * .5);
+    rise.forEach(a => a.cancel());
+    if (!out && !animating) await closeLid(200, -30);
+  } finally { fidgeting = false; }
+}
+// ① 没事时每 1~2.5 分钟自己动一下：晃一下 / 亮一下 / 原地蹦一下 / 睁眼左右看看 / 掀盖偷看
+let nextFidget = Date.now() + 40000;
+async function fidget(r = Math.random()) {
+  if (!ballIdle() || count > 0 || Date.now() < angryUntil) return;
+  if (r >= .8) return crack(900);
+  fidgeting = true;
+  try {
+    if (r < .25) await wobble(1);
+    else if (r < .4) glint();
+    else if (r < .6) { awake(true, -1); await sleep(600); awake(true, 1); await sleep(600); awake(true, 0); await sleep(400); awake(false); }
+    else await orb.animate([{ transform: G }, { transform: G + ' scale(1.1, .9)', offset: .2 }, { transform: 'translateY(114px) scale(.95, 1.05)', offset: .5 }, { transform: G + ' scale(1.06, .94)', offset: .8 }, { transform: G }], { duration: 520, easing: 'ease-out' }).finished;
+  } finally { fidgeting = false; }
+}
+setInterval(() => { if (Date.now() < nextFidget) return; nextFidget = Date.now() + 60000 + Math.random() * 90000; fidget(); }, 1000);
+// ② 鼠标在附近：扭蛋往光标那边歪，里面那只睁眼跟着看；停在扭蛋上 1.2 秒，它会掀盖探头
+let lean = 0, leanTarget = 0, leanRaf = 0, hoverSince = 0, lastPeekEyes = 0;
+function leanTick() {
+  leanRaf = 0;
+  if (!ballIdle()) { lean = 0; return; }
+  lean += (leanTarget - lean) * .18;
+  if (Math.abs(leanTarget - lean) < .05) lean = leanTarget;
+  orb.style.transformOrigin = ''; orb.style.transform = Math.abs(lean) < .05 ? G : G + ' rotate(' + lean + 'deg)';
+  if (lean !== leanTarget) leanRaf = requestAnimationFrame(leanTick);
+}
+api.on('pet-cursor', ({ dx, d }) => {
+  const near = d < 300 && Date.now() >= angryUntil;
+  leanTarget = near ? Math.max(-9, Math.min(9, dx / 8)) * Math.min(1, (300 - d) / 200) : 0;
+  if (!fidgeting && !sulking && !animating && !out) awake(near, dx < -26 ? -1 : dx > 26 ? 1 : 0);
+  if (!leanRaf && ballIdle()) leanRaf = requestAnimationFrame(leanTick);
+  if (d < 26 && near) {
+    if (!hoverSince) hoverSince = Date.now();
+    if (Date.now() - hoverSince > 1200 && Date.now() - lastPeekEyes > 20000 && ballIdle() && count === 0) { lastPeekEyes = Date.now(); leanTarget = 0; lean = 0; orb.style.transform = G; crack(1400); }
+  } else hoverSince = 0;
+});
+// 眨眼
+setInterval(() => {
+  if (animating || (mood !== 'idle' && mood !== 'alert' && mood !== 'focus')) return;
+  wrap.classList.add('blink'); setTimeout(() => wrap.classList.remove('blink'), 140);
+}, 3800);
+
+// ---------- 鼠标 ----------
+// 透明的地方点得穿：由主进程按光标位置判断（这里把团子的轮廓报过去），所以能到这个窗口的按下都算抓它
+function reportShape() {
+  if (!out) return api.send('pet-shape', null);
+  const rows = {};
+  for (const q of dangoGrid(form)) { const r = rows[q.y] || (rows[q.y] = [q.x, q.x]); r[0] = Math.min(r[0], q.x); r[1] = Math.max(r[1], q.x); }
+  api.send('pet-shape', Object.entries(rows).map(([y, [a, b]]) => [8 + a * 4, 28 + y * 4, 8 + (b + 1) * 4, 32 + y * 4]));
+}
+wrap.addEventListener('mouseenter', () => { if (out && !animating && !flying && !held) { wagTail(); setTimeout(twitchEar, 300); } });
+// 拖动 vs 点击：按下就交给主进程，主进程按光标位置跟随、自己判断是拖还是点（光标甩出窗口时这里收不到 mousemove）
+// 只认真正的 pointerup / pointercancel，或之后某次指针事件里左键已经不在按着（窗口跟着光标走，松手后的 move 一定落在窗口上）。
+// 捕获丢失 / blur 会在按下后马上冒出来，不能当松手，不然一按就被当成松开 —— 「抓不起来」
+const plog = (...a) => api.send('pet-log', a.join(' '));
+let down = false;
+function startDrag(e) {
+  if (e.button !== 0) return;
+  if (down) plog('press while down');
+  down = true;
+  try { wrap.setPointerCapture(e.pointerId); } catch (err) { plog('capture fail', err && err.message); }
+  api.send('pet-drag-start', { x: e.screenX, y: e.screenY });
+}
+function endDrag(reason) { if (!down) return; down = false; api.send('pet-drag-end', reason); }
+window.addEventListener('pointerdown', startDrag, true);
+window.addEventListener('pointerup', (e) => { if (e.button === 0) endDrag('up'); }, true);
+window.addEventListener('pointercancel', () => endDrag('cancel'), true);
+window.addEventListener('pointermove', (e) => { if (down && !(e.buttons & 1)) endDrag('move-no-button'); }, true);
+wrap.addEventListener('lostpointercapture', () => { if (down) plog('lostpointercapture (ignored)'); });
+window.addEventListener('blur', () => { if (down) plog('blur (ignored)'); });
+api.on('pet-poke', () => pokeBall());
+window.addEventListener('contextmenu', (e) => { e.preventDefault(); api.send('pet-menu'); });
+window.addEventListener('error', (e) => plog('error', e.message, e.lineno));
+</script>
+</body></html>

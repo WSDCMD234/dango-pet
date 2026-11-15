@@ -1,0 +1,227 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>团子说</title>
+<style>
+  /* 奶油底 + 棕色字；扁平，不用阴影 */
+  :root { --bg: #fffdf8; --head: #f6eddd; --fg: #3a2a1c; --sub: #8a7d6b; --line: #e6d6bd; --soft: #f8f2e7; --chip: #f1e6d2; --chip-h: #e8dac3; --accent: #b8763a; --ink: #5a3a1e; --n: #9a9085; --r: #5b8def; --ssr: #e0a100; --diy: #2fa58a; --bad: #d64545; }
+  html, body { margin: 0; background: transparent; font: 13px/1.6 "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif; color: var(--fg); user-select: none; overflow: hidden; }
+  #box { position: absolute; left: 0; top: 0; width: max-content; }
+  /* ---- 头顶一句话 ---- */
+  .toast { max-width: 236px; padding: 6px 12px 7px; background: var(--bg); border: 2px solid var(--ink); border-radius: 12px; font-size: 13px; line-height: 1.5; color: var(--ink); font-weight: 600; margin-bottom: 7px; position: relative; white-space: pre-wrap; word-break: break-all; }
+  .toast::after { content: ''; position: absolute; left: calc(var(--tail, 50%) - 6px); bottom: -7px; width: 10px; height: 10px; background: var(--bg); border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg) scale(.9); border-bottom-right-radius: 2px; }
+  .below .toast { margin: 7px 0 0; }
+  .below .toast::after { bottom: auto; top: -7px; transform: rotate(-135deg) scale(.9); }
+  .enter { animation: pop .24s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.94); } }
+  /* ---- 卡片 ---- */
+  .card { width: 340px; background: var(--bg); border: 2px solid var(--ink); border-radius: 14px; box-sizing: border-box; overflow: hidden; }
+  .top { display: flex; align-items: center; padding: 7px 8px 7px 14px; background: var(--head); }
+  .top b { flex: 1; font-size: 13px; font-weight: 700; color: var(--ink); }
+  .x { cursor: pointer; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; color: var(--sub); }
+  .x:hover { background: var(--chip-h); color: var(--fg); }
+  .body { padding: 10px 14px 12px; white-space: pre-wrap; user-select: text; }
+  .foot { padding: 7px 14px; background: var(--soft); color: var(--sub); font-size: 12px; }
+  .row { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row .k { flex: none; width: 52px; color: var(--accent); font-weight: 700; }
+  .row .v { flex: 1; }
+  .pad { padding: 8px 14px 10px; }
+  button, .btn { font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 8px; padding: 5px 12px; background: var(--chip); color: var(--ink); }
+  button:hover, .btn:hover { background: var(--chip-h); }
+  button.main { background: var(--ink); color: #fff6e6; }
+  button.main:hover { background: #70492a; }
+  button:active { transform: scale(.96); }
+  svg.d { shape-rendering: crispEdges; display: block; }
+  .tag { display: inline-block; padding: 0 7px; border-radius: 8px; font-size: 11px; line-height: 17px; font-weight: 700; color: #fff; background: var(--n); vertical-align: 1px; }
+  .tag.R { background: var(--r); } .tag.SSR { background: var(--ssr); } .tag.DIY { background: var(--diy); }
+  .link { color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .err { color: var(--bad); font-size: 12px; padding-top: 6px; }
+  .hint { color: var(--sub); font-size: 12px; line-height: 1.5; padding-top: 6px; }
+  /* ---- 图鉴 ---- */
+  .scroll { max-height: 400px; overflow-y: auto; }
+  .scroll::-webkit-scrollbar { width: 6px; } .scroll::-webkit-scrollbar-thumb { background: var(--chip-h); border-radius: 3px; }
+  .pk { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; font-size: 12px; color: var(--sub); }
+  .pk b { color: var(--ink); font-size: 13px; } .pk span { flex: 1; }
+  .sw { cursor: pointer; width: 30px; height: 16px; border-radius: 8px; background: var(--chip-h); position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .sw.on { background: var(--accent); } .sw.on::after { left: 16px; }
+  .dex { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px 4px; padding: 6px 10px 4px; }
+  .dex.off { opacity: .45; }
+  .cell { position: relative; border-radius: 10px; padding: 4px 0 3px; text-align: center; border: 2px solid transparent; }
+  .cell.has { cursor: pointer; }
+  .cell.has:hover { background: var(--soft); }
+  .cell.on { border-color: var(--accent); background: var(--soft); }
+  .cell svg { width: 56px; height: 48px; margin: 0 auto; }
+  .cell.lock svg { filter: brightness(0); opacity: .13; }
+  .cell .nm { font-size: 11px; line-height: 1.35; white-space: nowrap; overflow: hidden; }
+  .cell.lock .nm { color: var(--sub); }
+  .cell .dot { position: absolute; right: 5px; top: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--n); }
+  .cell .dot.R { background: var(--r); } .cell .dot.SSR { background: var(--ssr); } .cell .dot.DIY { background: var(--diy); }
+  .cell .q { position: absolute; left: 0; right: 0; top: 16px; font-size: 18px; font-weight: 700; color: var(--sub); opacity: .55; }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; font-size: 12px; color: var(--sub); border-top: 1px solid var(--line); }
+  .bar span.g { flex: 1; }
+  .caps { display: flex; align-items: center; gap: 6px; padding: 0 12px 9px; font-size: 12px; color: var(--sub); flex-wrap: wrap; }
+  .caps i { font-style: normal; cursor: pointer; padding: 0 8px; border-radius: 9px; line-height: 19px; background: var(--chip); color: var(--ink); }
+  .caps i:hover { background: var(--chip-h); } .caps i.on { background: var(--ink); color: #fff6e6; }
+  /* ---- 新团子 / AI 结果 ---- */
+  .new { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  .new svg { width: 84px; height: 72px; flex: none; }
+  .new .t { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .new .s { color: var(--sub); font-size: 12px; margin-top: 2px; }
+  /* ---- 倒计时 ---- */
+  .cd { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .cd b { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .cd i { font-style: normal; color: var(--sub); font-size: 12px; }
+  .cd em { font-style: normal; font-weight: 700; color: var(--accent); min-width: 64px; text-align: right; }
+  .cd .del { cursor: pointer; color: var(--sub); width: 18px; text-align: center; border-radius: 50%; }
+  .cd .del:hover { background: var(--chip-h); color: var(--fg); }
+  .add { display: flex; gap: 6px; padding-top: 9px; }
+  input, textarea { font: inherit; color: var(--fg); background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 3px 8px; min-width: 0; outline: none; box-sizing: border-box; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  #cdName { flex: 1; } #cdDate { width: 128px; }
+  .chips { display: flex; gap: 6px; padding-top: 7px; flex-wrap: wrap; }
+  .chips span { cursor: pointer; padding: 0 9px; border-radius: 10px; background: var(--chip); font-size: 12px; line-height: 20px; }
+  .chips span:hover { background: var(--chip-h); }
+  .empty { color: var(--sub); padding: 4px 0 2px; }
+  /* ---- 专注 / AI / 打赏 ---- */
+  .big { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .acts { display: flex; gap: 8px; padding-top: 9px; align-items: center; }
+  .acts .g { flex: 1; }
+  textarea { width: 100%; height: 54px; resize: none; line-height: 1.5; padding: 6px 9px; display: block; }
+  .fld { display: flex; align-items: center; gap: 8px; padding-top: 7px; } .fld span { flex: none; width: 56px; color: var(--sub); font-size: 12px; } .fld input { flex: 1; }
+  .seg { display: flex; background: var(--chip); border-radius: 9px; padding: 2px; }
+  .seg span { flex: 1; text-align: center; cursor: pointer; border-radius: 7px; line-height: 24px; font-size: 12px; font-weight: 600; color: var(--sub); }
+  .seg span.on { background: var(--bg); color: var(--ink); }
+  .dots::after { content: '…'; animation: dots 1.2s steps(4, end) infinite; display: inline-block; overflow: hidden; vertical-align: bottom; width: 0; }
+  @keyframes dots { to { width: 1.2em; } }
+  .pay { display: flex; gap: 14px; justify-content: center; padding: 12px 14px 4px; }
+  .pay div { text-align: center; font-size: 12px; font-weight: 700; }
+  .pay img { width: 132px; height: 132px; display: block; image-rendering: pixelated; border-radius: 8px; margin-bottom: 5px; }
+</style></head>
+<body>
+<div id="box"></div>
+<script src="sprites.js"></script>
+<script>
+const box = document.getElementById('box');
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const act = (a) => api.send('bubble-action', a);
+const RN = { N: '普通', R: '稀有', SSR: '隐藏', DIY: '自制' };
+const HELP = [
+  ['点一下', '开扭蛋，蹦出一只团子；每次都可能不一样，还有隐藏款'],
+  ['拖着走', '按住拖到哪就待在哪，拎着会晃'],
+  ['甩出去', '拖着快速一甩再松手：会飞、撞屏幕边反弹、落地滚停'],
+  ['右键', '专注计时、倒计时、图鉴、AI 捏团子、各种提醒开关'],
+  ['脾气', '鼠标靠近它会看你；甩狠了会晕，连着甩会生气'],
+];
+function sprite(key) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'd');
+  drawDango(s, key);
+  for (const id of ['eyesClosed', 'mouthO', 'sweat']) { const g = s.querySelector('#' + id); if (g) g.remove(); }
+  return s;
+}
+const head = (t) => `<div class="top"><b>${esc(t)}</b><span class="x" data-act="close">×</span></div>`;
+const form = (k) => DANGO_FORMS[k] || DANGO_FORMS.dango;
+
+const VIEWS = {
+  toast: (c) => `<div class="toast">${esc(c.text)}</div>`,
+  say: (c) => `<div class="card">${head(c.title || '团子说')}${c.text ? `<div class="body">${esc(c.text)}</div>` : ''}</div>`,
+  help: (c) => `<div class="card">${head(c.first ? '你好，我是团子' : '玩法说明')}
+    <div class="pad">${HELP.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div>
+    <div class="foot">万能团子 v${esc(c.version || '')} · 数据只存在你电脑上</div></div>`,
+  new: (c) => { const f = form(c.form); return `<div class="card"><div class="new"><span data-sprite="${esc(c.form)}"></span><div>
+    <div class="t">新团子！${esc(f.name)} <span class="tag ${f.rarity}">${RN[f.rarity] || ''}</span></div>
+    <div>${esc(f.say)}</div>${f.rarity === 'DIY' ? '' : `<div class="s">图鉴 ${c.got}/${c.total}</div>`}</div></div></div>`; },
+  dex: (c) => {
+    const base = c.packs.find(p => p.id === 'base'), got = base.keys.filter(k => c.dex[k]).length;
+    const cell = (k) => { const f = form(k), has = !!c.dex[k] || f.rarity === 'DIY';
+      return `<div class="cell ${has ? 'has' : 'lock'} ${c.chosen === k ? 'on' : ''}" ${has ? `data-act="choose" data-form="${esc(k)}" title="见过 ${c.dex[k] || 0} 次"` : ''}>
+        <span data-sprite="${esc(k)}"></span><i class="dot ${f.rarity}"></i>${has ? '' : '<div class="q">?</div>'}<div class="nm">${has ? esc(f.name) : '？？？'}</div></div>`; };
+    return `<div class="card">${head(`图鉴 ${got}/${base.keys.length}`)}<div class="scroll">${c.packs.map(p => `
+      <div class="pk"><b>${esc(p.name)}</b><span>${p.keys.length} 只${p.on ? '' : ' · 不抽'}</span>${p.del ? `<span class="link" style="flex:none" data-act="pack-del" data-id="${esc(p.id)}">删掉</span>` : ''}<i class="sw ${p.on ? 'on' : ''}" data-act="pack" data-id="${esc(p.id)}" title="抽不抽这一包"></i></div>
+      <div class="dex ${p.on ? '' : 'off'}">${p.keys.map(cell).join('')}</div>`).join('')}</div>
+    <div class="bar"><span class="g">${c.chosen === 'random' ? '点一只，让它常驻' : `常驻：${esc(form(c.chosen).name)}`}</span><button class="${c.chosen === 'random' ? 'main' : ''}" data-act="choose" data-form="random">每次随机</button></div>
+    <div class="caps">扭蛋${c.capsules.map(s => `<i class="${c.capsule === s.id ? 'on' : ''}" data-act="capsule" data-id="${esc(s.id)}">${esc(s.name)}</i>`).join('')}</div>
+    <div class="foot">${c.canAI ? '<span class="link" data-act="ai">AI 捏一只</span> · ' : ''}${c.canOpen ? '<span class="link" data-act="folder">团子文件夹</span> · ' : ''}普通 ${c.odds.N}% <span style="color:var(--r)">稀有 ${c.odds.R}%</span> <span style="color:var(--ssr)">隐藏 ${c.odds.SSR}%</span></div></div>`;
+  },
+  countdown: (c) => `<div class="card">${head('倒计时')}<div class="pad">
+    ${c.items.length ? c.items.map((it, i) => `<div class="cd"><b>${esc(it.name)}</b><i>${esc(it.date)}</i><em>${it.n > 0 ? `还有 ${it.n} 天` : it.n === 0 ? '就是今天' : `过了 ${-it.n} 天`}</em><span class="del" data-act="cd-del" data-i="${i}">×</span></div>`).join('') : '<div class="empty">还没有。加一个考试 / DDL，团子每天帮你数日子</div>'}
+    <div class="add"><input id="cdName" maxlength="12" placeholder="比如：期末考试"><input id="cdDate" type="date" min="${esc(c.today)}"><button class="main" id="cdAdd">添加</button></div>
+    <div class="chips">${['期末考试', '四六级', '考研', '论文 DDL', '答辩', '放假'].map(n => `<span data-fill="${n}">${n}</span>`).join('')}</div>
+    </div></div>`,
+  focusDone: (c) => `<div class="card"><div class="pad"><div class="big">专注完成！${c.min} 分钟</div>
+    <div>今天第 ${c.n} 个 · 一共 ${c.total} 个</div><div style="color:var(--sub)">休息 ${c.brk} 分钟，起来喝口水</div></div></div>`,
+  breakDone: (c) => `<div class="card"><div class="pad"><div class="big">${esc(c.text)}</div>
+    <div class="acts"><button class="main" data-act="focus" data-min="${c.min}">再来 ${c.min} 分钟</button><button data-act="close">收工</button></div></div></div>`,
+  // AI 捏团子：setup 填接口 → ask 说一句话 → busy 等 → result 看看要不要
+  ai: (c) => {
+    if (c.stage === 'setup') { const d = c.draft || c.cfg || {}, claude = d.provider !== 'openai';
+      return `<div class="card">${head('AI 捏团子 · 接口设置')}<div class="pad">
+      <div class="seg" id="aiProv"><span class="${claude ? 'on' : ''}" data-prov="claude">Claude</span><span class="${claude ? '' : 'on'}" data-prov="openai">其它（OpenAI 兼容）</span></div>
+      <div class="fld"><span>密钥</span><input id="aiKey" type="password" placeholder="${c.cfg && c.cfg.hasKey ? '已保存，不改就留空' : '粘贴你的 API Key'}"></div>
+      <div class="fld"><span>模型</span><input id="aiModel" value="${esc(d.model || '')}" placeholder="${claude ? 'claude-opus-5-5' : '模型名'}"></div>
+      <div class="fld"><span>接口地址</span><input id="aiUrl" value="${esc(d.baseUrl || '')}" placeholder="${claude ? '不填就用官方地址' : '一般以 /v1 结尾'}"></div>
+      ${c.error ? `<div class="err">${esc(c.error)}</div>` : ''}
+      <div class="hint">密钥加密存在你电脑上，只会发给上面这个地址。只有你点「捏一只」的时候才联网，发出去的只有你写的那句话。</div>
+      <div class="acts"><span class="g"></span><button class="main" id="aiSave">保存</button></div></div></div>`; }
+    if (c.stage === 'busy') return `<div class="card"><div class="pad"><div class="big">正在捏<span class="dots"></span></div><div style="color:var(--sub)">${esc(c.text)}</div></div></div>`;
+    if (c.stage === 'result') { const f = form(c.form); return `<div class="card">${head('捏好了')}<div class="new"><span data-sprite="${esc(c.form)}"></span><div>
+      <div class="t">${esc(f.name)} <span class="tag DIY">自制</span></div><div>${esc(f.say)}</div></div></div>
+      <div class="pad" style="padding-top:0"><div class="acts"><button class="main" data-act="ai-keep">收下</button><button data-act="ai-redo" data-text="${esc(c.text)}">重捏</button><span class="g"></span><span class="link" data-act="ai-back" data-text="${esc(c.text)}">改描述</span></div></div></div>`; }
+    return `<div class="card">${head('AI 捏团子')}<div class="pad">
+      <textarea id="aiText" maxlength="200" placeholder="想要一只什么样的团子？比如：戴墨镜的柠檬团子">${esc(c.text || '')}</textarea>
+      <div class="chips">${['戴墨镜的柠檬团子', '西瓜味的，头上有片叶子', '宇航员团子', '熬夜赶 DDL 的黑眼圈团子'].map(n => `<span data-fill="${n}">${n}</span>`).join('')}</div>
+      ${c.error ? `<div class="err">${esc(c.error)}</div>` : ''}
+      <div class="acts"><button class="main" id="aiGo">捏一只</button><span class="g"></span><span class="link" data-act="ai-setup">接口设置</span></div></div></div>`;
+  },
+  donate: () => `<div class="card">${head('请团子喝杯奶茶')}
+    <div class="pay"><div style="color:#07c160"><img src="../assets/donate_wechat.png">微信</div><div style="color:#1677ff"><img src="../assets/donate_alipay.png">支付宝</div></div>
+    <div class="pad" style="text-align:center;color:var(--sub);padding-top:4px">团子永远免费。觉得好用，随手打赏一点就行；不打也完全没关系。</div></div>`,
+};
+
+function measure() { const r = box.getBoundingClientRect(); api.send('bubble-size', { w: Math.ceil(r.width), h: Math.ceil(r.height) }); }
+function render(c) {
+  box.className = '';
+  box.innerHTML = (VIEWS[c.view] || VIEWS.say)(c);
+  for (const el of box.querySelectorAll('[data-sprite]')) el.replaceWith(sprite(el.dataset.sprite));
+  const first = box.firstElementChild; if (first) { first.classList.remove('enter'); void first.offsetWidth; first.classList.add('enter'); }
+  const $ = (id) => document.getElementById(id);
+  if ($('cdAdd')) {
+    const name = $('cdName'), date = $('cdDate');
+    const go = () => { if (name.value.trim() && date.value) act({ act: 'cd-add', name: name.value, date: date.value }); else (name.value.trim() ? date : name).focus(); };
+    $('cdAdd').onclick = go;
+    for (const el of [name, date]) el.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    for (const chip of box.querySelectorAll('[data-fill]')) chip.onclick = () => { name.value = chip.dataset.fill; date.focus(); };
+    setTimeout(() => name.focus(), 60);
+  }
+  if ($('aiGo')) {
+    const t = $('aiText'), go = () => { if (t.value.trim()) act({ act: 'ai-make', text: t.value }); else t.focus(); };
+    $('aiGo').onclick = go;
+    t.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); go(); } };
+    for (const chip of box.querySelectorAll('[data-fill]')) chip.onclick = () => { t.value = chip.dataset.fill; t.focus(); };
+    setTimeout(() => t.focus(), 60);
+  }
+  if ($('aiSave')) {
+    let prov = $('aiProv').querySelector('.on').dataset.prov;
+    for (const sp of $('aiProv').children) sp.onclick = () => { prov = sp.dataset.prov; for (const o of $('aiProv').children) o.classList.toggle('on', o === sp); $('aiModel').placeholder = prov === 'claude' ? 'claude-opus-5-5' : '模型名'; $('aiUrl').placeholder = prov === 'claude' ? '不填就用官方地址' : '一般以 /v1 结尾'; if (prov === 'claude' && !/^claude/.test($('aiModel').value)) $('aiModel').value = ''; };
+    $('aiSave').onclick = () => act({ act: 'ai-save', provider: prov, key: $('aiKey').value, model: $('aiModel').value, baseUrl: $('aiUrl').value });
+    setTimeout(() => $('aiKey').focus(), 60);
+  }
+  measure();
+}
+box.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const d = el.dataset;
+  act({ act: d.act, form: d.form, id: d.id, text: d.text, i: d.i === undefined ? undefined : +d.i, min: d.min === undefined ? undefined : +d.min });
+});
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') act({ act: 'close' }); });
+api.on('show', render);
+// 自带以外的团子（团子包 / AI 捏的）：主进程发过来，这边也登记上才画得出来
+let extra = new Set();
+api.on('forms', ({ forms = {} }) => {
+  for (const k of extra) if (!forms[k]) unregisterDango(k);
+  extra = new Set(Object.keys(forms));
+  for (const [k, d] of Object.entries(forms)) registerDango(k, d);
+});
+// 小尾巴指向团子：x = 团子中心在气泡里的横坐标；below = 气泡被挤到团子下面了
+api.on('tail', ({ x, below }) => { box.classList.toggle('below', !!below); box.style.setProperty('--tail', Math.min(box.offsetWidth - 14, Math.max(14, x)) + 'px'); });
+</script>
+</body></html>
