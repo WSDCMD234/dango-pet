@@ -65,7 +65,8 @@
       "deleteAppDataOnUninstall": false,
       "artifactName": "dango-pet-setup.${ext}"
     },
-    "asar": true
+    "asar": true,
+    "publish": null
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

@@ -4,7 +4,7 @@
 
 ![万能团子](docs/media/banner.png)
 
-**[⬇ 点这里下载安装包](https://github.com/zzr223/dango-pet/releases/latest/download/dango-pet-setup.exe)** · Windows 10 / 11 · 免费 · 开源 · 随便改
+**[⬇ 点这里下载安装包](https://github.com/WSDCMD234/dango-pet/releases/latest/download/dango-pet-setup.exe)** · Windows 10 / 11 · 免费 · 开源 · 随便改
 
 第一次装？看下面的 [下载和安装](#下载和安装)，三步。
 
@@ -31,10 +31,10 @@
 
 | | 点链接直接下载 | 大小 |
 |---|---|---|
-| **安装版**（推荐） | **[dango-pet-setup.exe](https://github.com/zzr223/dango-pet/releases/latest/download/dango-pet-setup.exe)** | 约 92 MB |
-| 免安装版 | [dango-pet-win-x64.zip](https://github.com/zzr223/dango-pet/releases/latest/download/dango-pet-win-x64.zip) | 约 119 MB |
+| **安装版**（推荐） | **[dango-pet-setup.exe](https://github.com/WSDCMD234/dango-pet/releases/latest/download/dango-pet-setup.exe)** | 约 92 MB |
+| 免安装版 | [dango-pet-win-x64.zip](https://github.com/WSDCMD234/dango-pet/releases/latest/download/dango-pet-win-x64.zip) | 约 119 MB |
 
-不用注册、不用登录。历史版本在 [Releases](https://github.com/zzr223/dango-pet/releases) 页。
+不用注册、不用登录。历史版本在 [Releases](https://github.com/WSDCMD234/dango-pet/releases) 页。
 
 **安装版，三步：**
 
@@ -83,7 +83,7 @@
 需要 [Node.js](https://nodejs.org) 18 以上。
 
 ```
-git clone https://github.com/zzr223/dango-pet.git
+git clone https://github.com/WSDCMD234/dango-pet.git
 cd dango-pet
 npm install
 npm start        # 运行
