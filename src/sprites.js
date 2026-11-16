@@ -250,16 +250,23 @@
   const CAP_PAL = { o: '#4a3324', g: 'rgba(255,255,255,.34)', h: 'rgba(255,255,255,.95)', s: '#4a3324', c: '#ff9d5c', k: '#e07a3a', t: '#ffc08a' };
   // 扭蛋的像素：part = bot（底壳）/ in（里面的脑袋，眼睛带 eye 标记）/ top（玻璃罩，能掀开）
   // opt.eyes=false 不画眼睛（睡着）；opt.look = -1 / 0 / 1 眼睛往左 / 中 / 右看
-  // opt.style：扭蛋样式 { pal: 换掉哪些颜色, rows: 自己画的 12×12, glass: false = 上半不透明（看不见里面）}
+  // opt.style：扭蛋样式 { pal: 换掉哪些颜色, rows: 自己画的 12×12, glass: false = 上半不透明（看不见里面）,
+  //   light: 指示灯用的字母（这些格子单独成一组 part = light，能亮）, inside: { bg, eye } = 不透明时掀开盖子看到的里面 }
   function capsulePixels(key, opt = {}) {
     const f = FORMS[key] || FORMS.dango, out = [], st = opt.style || {};
-    const P = { ...CAP_PAL, ...(st.pal || {}) }, rows = st.rows || CAPSULE;
-    rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.' && P[ch] && y >= 6) out.push({ x, y, c: P[ch], part: 'bot' }); }));
+    const P = { ...CAP_PAL, ...(st.pal || {}) }, rows = st.rows || CAPSULE, lamp = st.light || '';
+    const each = (fn) => rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.' && P[ch]) fn(ch, x, y); }));
+    each((ch, x, y) => { if (y >= 6 && ch !== lamp) out.push({ x, y, c: P[ch], part: 'bot' }); });
     if (st.glass !== false) {
       for (const [y, x0, w] of CAP_HEAD) for (let x = x0; x < x0 + w; x++) out.push({ x, y, c: f.head || (f.fn && f.fn(x * 2, y * 2, 'b')) || f.pal.b, part: 'in' });
       if (opt.eyes !== false) for (const ex of [4, 7]) out.push({ x: ex + (opt.look || 0), y: 5, c: f.e || DEF.e, part: 'in', eye: true });
+    } else if (st.inside) {
+      // 不透明的外壳：里面是一片暗色加一双眼睛，平时被盖子挡着，掀开一条缝才看得见（只画在外壳轮廓以内）
+      for (const y of [4, 5]) { const xs = [...rows[y]].map((ch, x) => (ch === '.' ? -1 : x)).filter(x => x >= 0); for (let x = xs[0] + 1; x < xs[xs.length - 1]; x++) out.push({ x, y, c: st.inside.bg, part: 'in' }); }
+      if (opt.eyes !== false) for (const ex of [4, 7]) out.push({ x: ex + (opt.look || 0), y: 5, c: st.inside.eye, part: 'in', eye: true });
     }
-    rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.' && P[ch] && y < 6) out.push({ x, y, c: P[ch], part: 'top' }); }));
+    each((ch, x, y) => { if (y < 6 && ch !== lamp) out.push({ x, y, c: P[ch], part: 'top' }); });
+    each((ch, x, y) => { if (ch === lamp) out.push({ x, y, c: P[ch], part: 'light' }); });
     return out;
   }
 
@@ -283,7 +290,7 @@
 
   // ====================== 改装：配方 → 团子 ======================
   // 「配方」是给人和 AI 写的简化格式（docs/改装指南.md 里有说明）：选颜色、耳朵、尾巴、花纹，再点缀几个小色块，不用自己画整只。
-  // 想完全自己画，也可以直接写上面 FORMS 那种格式（带 pal 的），两种都能放进团子包。
+  // 想完全自己画，也可以直接写上面 FORMS 那种格式（带 pal 的），两种都能放进扩展包。
   const EARS = { cat: FORMS.dango.half, bunny: FORMS.bunny.half, bear: FORMS.panda.half, horn: FORMS.devil.half };
   const TAILS = { cat: FORMS.dango.tail, devil: FORMS.devil.tail };
   const PATTERNS = {
@@ -360,6 +367,8 @@
     if (d.blush === false) form.blush = false;
     else if (d.blush && Array.isArray(d.blush.x) && d.blush.x.length === 2 && d.blush.x.every(inW) && inW(d.blush.y)) form.blush = { x: d.blush.x.map(int), y: int(d.blush.y), ...(HEX.test(d.blush.c || '') ? { c: d.blush.c } : {}) };
     for (const k of ['e', 'hi', 'm', 'eClosed', 'head']) if (HEX.test(d[k] || '')) form[k] = d[k];
+    const fx = (Array.isArray(d.fx) ? d.fx : []).filter(c => HEX.test(c || '')).slice(0, 6);      // 放粒子用的颜色
+    if (fx.length) form.fx = fx;
     if (d.shade === false) form.shade = false;
     if (d.mouthHide === true) form.mouthHide = true;
     if (int(d.ear) >= 0 && int(d.ear) <= H) form.ear = int(d.ear);
@@ -368,23 +377,52 @@
     if (lines.length) form.lines = lines;
     return { ok: true, form };
   }
-  // 团子包里自带的扭蛋样式：{ name, pal, rows（可选，自己画的 12×12）, glass }
+  // 扩展包里自带的扭蛋样式：{ name, pal, rows（可选，自己画的 12×12）, glass, light / lightOn（指示灯）, inside（不透明时掀开盖子看到的里面）}
   function checkCapsule(d) {
     if (!d || typeof d !== 'object') return { ok: false, error: '不是扭蛋样式' };
     const pal = {};
     for (const [k, v] of Object.entries(d.pal || {})) if (k.length === 1 && k !== '.' && HEX.test(v || '')) pal[k] = v;
     const style = { name: text(d.name, 8) || '自定义', pal, glass: d.glass !== false };
+    const all = { ...CAP_PAL, ...pal };
     if (d.rows) {
-      const all = { ...CAP_PAL, ...pal };
       if (!Array.isArray(d.rows) || d.rows.length !== 12 || !d.rows.every(row => typeof row === 'string' && row.length === 12 && [...row].every(ch => ch === '.' || all[ch]))) return { ok: false, error: 'rows 要正好 12 行、每行 12 个字符，且都在 pal 里' };
       style.rows = d.rows;
     }
+    // 指示灯：rows 里用这个字母画的格子会亮（得真的画了才算数）
+    if (typeof d.light === 'string' && d.light.length === 1 && all[d.light] && (style.rows || CAPSULE).some(row => row.includes(d.light))) {
+      style.light = d.light; style.lightOn = HEX.test(d.lightOn || '') ? d.lightOn : '#ff5a4e';
+    }
+    if (!style.glass && d.inside && typeof d.inside === 'object') style.inside = { bg: HEX.test(d.inside.bg || '') ? d.inside.bg : '#2a2230', eye: HEX.test(d.inside.eye || '') ? d.inside.eye : '#fff6c8' };
     return { ok: true, style };
+  }
+  // 一整个扩展包（一个 JSON 文件）：{ name, dangos: [团子…], capsule: 扭蛋样式, appear / morph: 出场和变身方式, menu: 右键菜单里的名字, id: 代号 }
+  // 整个文件就是一只团子也行。返回查过、整理好的：{ ok, name, id, forms: [{ i, form }], skipped: [{ i, error }], capsule, anim, menu }
+  // i 是这只在 dangos 里排第几（写坏的那只跳过，别的序号不变 —— 存档里记的就是这个序号）
+  function checkPack(d) {
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return { ok: false, error: '不是一个扩展包' };
+    const one = !Array.isArray(d.dangos) && !!(d.colors || d.pal);
+    const forms = [], skipped = [];
+    (one ? [d] : Array.isArray(d.dangos) ? d.dangos : []).slice(0, 80).forEach((x, i) => {
+      const r = x && x.pal ? checkForm(x) : fromRecipe(x);
+      if (r.ok) forms.push({ i, form: r.form }); else skipped.push({ i, error: r.error });
+    });
+    const cap = !one && d.capsule ? checkCapsule(d.capsule) : null;
+    if (cap && !cap.ok) skipped.push({ i: 'capsule', error: cap.error });
+    const capsule = cap && cap.ok ? cap.style : null;
+    if (!forms.length && !capsule) return { ok: false, error: skipped.length ? '里面的东西都用不了：' + skipped[0].error : '里面没有团子，也没有扭蛋样式', skipped };
+    const anim = {};
+    if (!one && d.appear === 'flash') anim.appear = 'flash';      // 出场：一道白光里显形（不写 = 从扭蛋里蹦出来）
+    if (!one && d.morph === 'glow') anim.morph = 'glow';          // 变身：发白、新旧两个样子交替闪（不写 = 翻硬币）
+    return {
+      ok: true, name: text(d.name, 14), forms, skipped, capsule, anim: Object.keys(anim).length ? anim : null,
+      menu: one ? '' : text(d.menu, 6),
+      id: !one && typeof d.id === 'string' && /^[\w-]{1,40}$/.test(d.id) ? d.id : '',
+    };
   }
   const BUILTIN = Object.keys(FORMS);
   function registerDango(key, def) { if (!BUILTIN.includes(key)) FORMS[key] = def; }
   function unregisterDango(key) { if (!BUILTIN.includes(key)) delete FORMS[key]; }
 
   return { DANGO_W: W, DANGO_H: H, DANGO_FORMS: FORMS, DANGO_BUILTIN: BUILTIN, DANGO_RARITY: RARITY, DANGO_CAP_STYLES: CAP_STYLES, dangoGrid: grid, dangoFace: face, drawDango, capsulePixels, CAP_PAL,
-    dangoFromRecipe: fromRecipe, dangoCheckForm: checkForm, dangoCheckCapsule: checkCapsule, registerDango, unregisterDango };
+    dangoFromRecipe: fromRecipe, dangoCheckForm: checkForm, dangoCheckCapsule: checkCapsule, dangoCheckPack: checkPack, registerDango, unregisterDango };
 });

@@ -1,11 +1,12 @@
 // 万能团子（主进程）：开窗口、托盘、右键菜单，把系统的事接给 core.js（真正的逻辑都在那边）
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor, safeStorage, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { createConfig } = require('./config');
 const { createCore, PET } = require('./core');
 const { createAI } = require('./ai');
+const { createPacks } = require('./packs');
 
 const TEST = process.env.DANGO_TEST || '';      // 自动测试脚本的路径：窗口离屏渲染，不会出现在桌面上
 // 存档放 %APPDATA%\dango-pet（固定英文目录名）；测试时换到临时目录，不碰真存档
@@ -83,29 +84,13 @@ function createWindows() {
 }
 app.on('before-quit', () => { quitting = true; });
 
-// ---------- 团子包：%APPDATA%/dango-pet/dangos/*.json（改装用，AI 捏的也存在这儿）----------
-const PACKS = path.join(DATA, 'dangos');
-const packId = (name) => String(name).replace(/\.json$/i, '').replace(/[^\w\u4e00-\u9fa5-]/g, '_').slice(0, 40) || 'pack';
-const packs = {
-  list() {
-    let files = [];
-    try { files = fs.readdirSync(PACKS).filter(n => /\.json$/i.test(n)).sort(); } catch { return []; }
-    const out = [];
-    for (const n of files.slice(0, 200)) {
-      try {
-        const p = path.join(PACKS, n);
-        if (fs.statSync(p).size > 512 * 1024) { log('pack too big', n); continue; }
-        const d = JSON.parse(fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, ''));
-        // 一个文件可以是一整包 { name, capsule, dangos: [...] }，也可以就是一只团子
-        const one = d && !Array.isArray(d.dangos) && (d.colors || d.pal);
-        out.push({ id: packId(n), name: (d && d.name) || packId(n), capsule: one ? null : d.capsule, dangos: one ? [d] : d.dangos });
-      } catch (e) { log('pack bad', n, e.message); }
-    }
-    return out;
-  },
-  save(id, pack) { try { fs.mkdirSync(PACKS, { recursive: true }); fs.writeFileSync(path.join(PACKS, packId(id) + '.json'), JSON.stringify(pack, null, 2)); } catch (e) { log('pack save fail', e.message); } },
-  remove(id) { try { fs.unlinkSync(path.join(PACKS, packId(id) + '.json')); } catch (e) { log('pack remove fail', e.message); } },
-  openFolder() { try { fs.mkdirSync(PACKS, { recursive: true }); shell.openPath(PACKS); } catch { } },
+// ---------- 扩展包：%APPDATA%/dango-pet/dangos/*.json（改装用，AI 捏的也存在这儿；读写在 packs.js）----------
+const packs = createPacks(path.join(DATA, 'dangos'), log);
+packs.openFolder = () => { try { fs.mkdirSync(packs.dir, { recursive: true }); shell.openPath(packs.dir); } catch { } };
+// 「添加扩展包…」：弹系统的选文件窗口；取消了回 null
+packs.pick = async () => {
+  const r = await dialog.showOpenDialog({ title: '选一个扩展包', buttonLabel: '添加', filters: [{ name: '扩展包', extensions: ['json'] }], properties: ['openFile'] });
+  return r.canceled || !r.filePaths[0] ? null : packs.add(r.filePaths[0]);
 };
 // AI 接口的密钥：用系统的加密存（Windows 上是 DPAPI，只有这台电脑的这个用户能解开），不进日志
 const secret = {

@@ -9,20 +9,20 @@
 //   workAreas()    → [{ x, y, width, height }]                所有屏幕的工作区（第一个是主屏）
 //   idleSeconds()  → 多久没动鼠标键盘了（可选）
 //   autoStart      { get(), set(bool) }（可选）  quit()（可选）  log(...)（可选）  random()（可选）  tray(提示文字)（可选）
-//   packs          { list() → [{ id, name, capsule, dangos }], save(id, 包), remove(id), openFolder() }（可选）  团子包（改装）
+//   packs          { list() → [{ id, …包文件的内容 }], save(id, 包), remove(id), openFolder()（可选）, pick() → Promise<null | { ok, id } | { ok: false, error }>（可选，让用户选一个文件加进来）}（可选）  扩展包（改装）
 //   ai             { config(), save(设置), make(一句描述) → Promise<{ ok, recipe } | { ok: false, error }> }（可选）  AI 捏团子
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./sprites'), require('./lines'));
   else root.DangoCore = factory(root, root.DANGO_LINES);
 })(typeof self !== 'undefined' ? self : this, function (S, LINES) {
-  const FORMS = S.DANGO_FORMS, RARITY = S.DANGO_RARITY, BUILTIN = S.DANGO_BUILTIN;      // BUILTIN = 自带的 17 只；FORMS 里还会有团子包 / AI 捏的
+  const FORMS = S.DANGO_FORMS, RARITY = S.DANGO_RARITY, BUILTIN = S.DANGO_BUILTIN;      // BUILTIN = 自带的 17 只；FORMS 里还会有扩展包 / AI 捏的
   const PET = 128;                                     // 团子窗口边长
   const CARD_W = 340;                                  // 卡片气泡宽
   const BALL_BOX = { l: 40, r: 88, t: 76, b: 124 };    // 扭蛋在 128×128 窗口里的位置（碰撞按它算）
   const THROW_SPEED = 1800;                            // 松手瞬间比这快才算甩（px/s），不然就放在原地
   const REST_MIN = 45;                                 // 连续用电脑多久提醒休息
   const BREAK_MIN = 5;                                 // 专注完休息几分钟
-  const VERSION = '2.1.0';
+  const VERSION = '2.2.0';
 
   // 坐标转成真整数：Math.round 会得到 -0，Electron 的 setPosition / setBounds 不认 -0（在屏幕最左边会报错）
   const ri = (v) => (Math.round(v) | 0);
@@ -52,23 +52,21 @@
     let focus = null;         // 专注中：{ phase: 'work' | 'break', end, min }
     let forced = [];          // 测试 / 演示：接下来几次指定抽到谁
 
-    // ---------- 团子包（改装）----------
-    // 一个包 = 一个 JSON 文件：若干只团子（配方或者完整画法）+ 可选的扭蛋样式。自带的 17 只算一个叫 base 的包。
-    let packs = [];           // [{ id, name, keys, capsule }]
+    // ---------- 扩展包（改装）----------
+    // 一个包 = 一个 JSON 文件：若干只团子（配方或者完整画法）+ 可选的扭蛋样式、出场 / 变身方式、右键菜单。自带的 17 只算一个叫 base 的包。
+    let packs = [];           // [{ id, name, keys, capsule, menu }]
     let aiPending = null;     // AI 刚捏出来、还没决定收不收的那只
     let aiBusy = false;
     function loadPacks() {
       for (const k of Object.keys(FORMS)) if (!BUILTIN.includes(k) && !(aiPending && aiPending.key === k)) S.unregisterDango(k);
       packs = [];
       for (const p of (host.packs ? host.packs.list() : [])) {
-        const keys = [];
-        (Array.isArray(p.dangos) ? p.dangos : []).slice(0, 80).forEach((d, i) => {
-          const r = d && d.pal ? S.dangoCheckForm(d) : S.dangoFromRecipe(d);
-          if (!r.ok) return log('pack skip', p.id, i, r.error);
-          S.registerDango(p.id + '#' + i, { ...r.form, pack: p.id }); keys.push(p.id + '#' + i);
-        });
-        const cap = p.capsule ? S.dangoCheckCapsule(p.capsule) : null;
-        if (keys.length || (cap && cap.ok)) packs.push({ id: p.id, name: String(p.name || p.id).slice(0, 14), keys, capsule: cap && cap.ok ? cap.style : null });
+        const r = S.dangoCheckPack(p);
+        for (const s of r.skipped || []) log('pack skip', p.id, s.i, s.error);
+        if (!r.ok) continue;
+        // 出场 / 变身方式是整包定的，记在每只团子身上一起发给页面（anim）
+        const keys = r.forms.map(({ i, form }) => { S.registerDango(p.id + '#' + i, { ...form, pack: p.id, ...(r.anim ? { anim: r.anim } : {}) }); return p.id + '#' + i; });
+        packs.push({ id: p.id, name: r.name || String(p.id).slice(0, 14), keys, capsule: r.capsule, menu: keys.length ? r.menu : '' });
       }
       syncForms();
     }
@@ -178,7 +176,7 @@
       if (f && f.rarity === 'SSR') return pickOne(LINES.hidden);
       if (f && f.lines && f.lines.length && r < .5) return pickOne(f.lines);      // 自制的团子有自己的台词
       if (cd && r < .25) return cdLine(cd);
-      if (f && r < .45) return `${f.name}：${f.say}`;
+      if (f && f.say && r < .45) return `${f.name}：${f.say}`;      // 没写介绍的（自制的可以不写）就不念这句
       if (f && f.rarity === 'R' && r < .6) return pickOne(LINES.rare);
       return (r < .8 && hourLine()) || pickOne(LINES.poke);
     }
@@ -436,15 +434,20 @@
     }
     function delCountdown(i) { const list = [...(cfg.get().countdowns || [])]; list.splice(i, 1); cfg.set({ countdowns: list }); pushState(); }
 
-    // ---------- 图鉴（也是改装的地方：开关团子包、换扭蛋样式）----------
+    // ---------- 图鉴（也是改装的地方：开关扩展包、换扭蛋样式）----------
     function dexView() {
       const off = packOff();
-      const list = [{ id: 'base', name: '原版团子', keys: BUILTIN, on: !off.has('base') }, ...packs.filter(p => p.keys.length).map(p => ({ id: p.id, name: p.name, keys: p.keys, on: !off.has(p.id), del: true }))];
+      const list = [{ id: 'base', name: '原版团子', keys: BUILTIN, on: !off.has('base') }, ...packs.filter(p => p.keys.length).map(p => ({ id: p.id, name: p.name, keys: p.keys, on: !off.has(p.id), del: true, free: !!p.menu }))];
       const caps = [...Object.entries(S.DANGO_CAP_STYLES), ...Object.entries(capStyles())].map(([id, st]) => ({ id, name: st.name }));
-      return { view: 'dex', keep: true, dex: cfg.get().dex || {}, chosen: FORMS[cfg.get().chosen] ? cfg.get().chosen : 'random', packs: list, capsule: cfg.get().capsule || 'orange', capsules: caps, canAI: !!host.ai, canOpen: !!(host.packs && host.packs.openFolder), odds: { N: RARITY.N.odds, R: RARITY.R.odds, SSR: RARITY.SSR.odds } };
+      return { view: 'dex', keep: true, dex: cfg.get().dex || {}, chosen: FORMS[cfg.get().chosen] ? cfg.get().chosen : 'random', packs: list, capsule: cfg.get().capsule || 'orange', capsules: caps, canAI: !!host.ai, canOpen: !!(host.packs && host.packs.openFolder), canAdd: !!(host.packs && host.packs.pick), odds: { N: RARITY.N.odds, R: RARITY.R.odds, SSR: RARITY.SSR.odds } };
+    }
+    // 能不能直接选它常驻：见过的、自制的随时能选；带右键菜单的扩展包（同一只的几种样子）里的也随时能选
+    function canChoose(form) {
+      const f = FORMS[form]; if (!f) return false;
+      return !!(cfg.get().dex || {})[form] || f.rarity === 'DIY' || packs.some(p => p.menu && p.id === f.pack);
     }
     function choose(form) {
-      if (form !== 'random' && !(FORMS[form] && ((cfg.get().dex || {})[form] || FORMS[form].rarity === 'DIY'))) return;      // 只能选见过的（自制的随时能选）
+      if (form !== 'random' && !canChoose(form)) return;
       cfg.set({ chosen: form }); next = null; pushState();
     }
     function togglePack(id) {
@@ -494,6 +497,31 @@
       if (cfg.get().capsule === 'pack:' + id) cfg.set({ capsule: 'orange' });
       loadPacks(); next = null; pushState();
     }
+    // 添加扩展包：让你选一个 .json → 查过能用就装上 → 带扭蛋样式的直接换上、包里第一只马上出来给你看
+    let adding = false;
+    async function addPack() {
+      if (!host.packs || !host.packs.pick || adding) return;
+      adding = true; hideBubble();                 // 卡片是置顶的，会挡住选文件的窗口，先收起来
+      let r;
+      try { r = await host.packs.pick(); } catch (e) { r = { ok: false, error: '出错了：' + String(e && e.message || e).slice(0, 80) }; }
+      adding = false;
+      if (!r) return;                              // 点了取消
+      if (!r.ok) return showBubble({ view: 'say', title: '这个扩展包装不上', text: r.error }, 12000);
+      loadPacks();
+      const p = packs.find(x => x.id === r.id); if (!p) return;
+      const off = packOff(); if (off.delete(p.id)) cfg.set({ packsOff: [...off] });      // 以前关掉过的同一个包：重新打开
+      if (p.capsule) cfg.set({ capsule: 'pack:' + p.id });
+      const text = '装好了：' + p.name + '\n' + [p.keys.length ? p.keys.length + ' 只团子' : '', p.capsule ? '扭蛋「' + p.capsule.name + '」' : ''].filter(Boolean).join(' · ');
+      log('pack added', p.id, p.keys.length);
+      if (!p.keys.length || count > 0) { next = null; pushState(); return toast(text, 6000); }
+      forced.unshift(p.keys[0]); next = null; pushState();
+      pet.send('pet-peek', { ms: 9000, form: p.keys[0] });
+      // 团子正好在外面：直接说，它会当场变成包里第一只给你看
+      if (petOut) return toast(text, 6000);
+      // 在扭蛋里：让第一只出来，由它来说「装好了」；它要是不肯出来（正生着气），过一会儿照样把话说了
+      pendingSay = { text, ms: 6000 };
+      setTimeout(() => { if (pendingSay && pendingSay.text === text) { pendingSay = null; toast(text, 6000); } }, 2600);
+    }
 
     // ---------- 气泡里点了按钮 ----------
     function bubbleAction(a) {
@@ -502,6 +530,7 @@
       if (a.act === 'choose') { choose(a.form); return showBubble(dexView()); }
       if (a.act === 'pack') { togglePack(a.id); return showBubble(dexView()); }
       if (a.act === 'pack-del') { removePack(a.id); return showBubble(dexView()); }
+      if (a.act === 'pack-add') return addPack();
       if (a.act === 'capsule') { setCapsule(a.id); return showBubble(dexView()); }
       if (a.act === 'folder') return host.packs && host.packs.openFolder && host.packs.openFolder();
       if (a.act === 'ai') return openAI();
@@ -520,13 +549,20 @@
     // ---------- 右键菜单（主进程拿去建原生菜单，宣传片里照着画）----------
     function menuModel() {
       const c = cfg.get(), flip = (k, def) => () => { const cur = c[k] === undefined ? def : c[k]; cfg.set({ [k]: !cur }); };
-      const t = timerText();
+      const t = timerText(), off = packOff(), chosen = FORMS[c.chosen] ? c.chosen : 'random';
+      // 扩展包自己要的菜单项（包里写了 menu）：列出这一包的团子，点哪只就让哪只常驻
+      const packMenus = packs.filter(p => p.menu && !off.has(p.id)).map(p => ({ label: p.menu, submenu: [
+        { label: '每次随机', type: 'checkbox', checked: chosen === 'random', click: () => choose('random') },
+        ...p.keys.map(k => ({ label: FORMS[k].name, type: 'checkbox', checked: chosen === k, click: () => choose(k) })),
+      ] }));
       return [
         focus ? { label: `${focus.phase === 'work' ? '结束专注' : '结束休息'}（还剩 ${t.text}）`, click: stopFocus }
           : { label: '专注一会儿', submenu: [25, 45, 60].map(m => ({ label: `${m} 分钟`, click: () => startFocus(m) })) },
         { label: '倒计时…', click: () => showBubble(cdView()) },
         { label: `图鉴（${dexCount()}/${BUILTIN.length}）`, click: () => { loadPacks(); showBubble(dexView()); } },
+        ...packMenus,
         ...(host.ai ? [{ label: 'AI 捏团子…', click: () => openAI() }] : []),
+        ...(host.packs && host.packs.pick ? [{ label: '添加扩展包…', click: () => addPack() }] : []),
         { type: 'separator' },
         { label: `休息提醒（每 ${REST_MIN} 分钟）`, type: 'checkbox', checked: c.rest !== false, click: flip('rest', true) },
         { label: '深夜催睡', type: 'checkbox', checked: c.night !== false, click: flip('night', true) },
@@ -584,7 +620,7 @@
     };
 
     return {
-      api, start, dispose, petReady, petMessage, bubbleMessage, menuModel, startPos, checkPos, goHome, syncForms, loadPacks, openAI, aiMake,
+      api, start, dispose, petReady, petMessage, bubbleMessage, menuModel, startPos, checkPos, goHome, syncForms, loadPacks, addPack, openAI, aiMake,
       showBubble, hideBubble, toast, nudge, startFocus, stopFocus, throwPet, addCountdown, choose, pushState,
       force: (...ks) => { forced.push(...ks); if (ks.length) { next = null; pushState(); } },
       packs: () => packs,   // 演示 / 测试：指定接下来抽到谁

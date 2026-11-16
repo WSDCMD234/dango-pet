@@ -1,7 +1,7 @@
 {
   "name": "dango-pet",
   "productName": "万能团子",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "万能团子：住在扭蛋里的像素桌宠。能拎能甩，会陪你专注、帮你数 DDL，还能让 AI 捏一只新的。",
   "main": "src/main.js",
   "author": "dango-pet",

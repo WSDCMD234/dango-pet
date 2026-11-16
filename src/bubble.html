@@ -109,7 +109,7 @@ const HELP = [
   ['点一下', '开扭蛋，蹦出一只团子；每次都可能不一样，还有隐藏款'],
   ['拖着走', '按住拖到哪就待在哪，拎着会晃'],
   ['甩出去', '拖着快速一甩再松手：会飞、撞屏幕边反弹、落地滚停'],
-  ['右键', '专注计时、倒计时、图鉴、AI 捏团子、各种提醒开关'],
+  ['右键', '专注计时、倒计时、图鉴、AI 捏团子、添加扩展包、各种提醒开关'],
   ['脾气', '鼠标靠近它会看你；甩狠了会晕，连着甩会生气'],
 ];
 function sprite(key) {
@@ -132,7 +132,8 @@ const VIEWS = {
     <div>${esc(f.say)}</div>${f.rarity === 'DIY' ? '' : `<div class="s">图鉴 ${c.got}/${c.total}</div>`}</div></div></div>`; },
   dex: (c) => {
     const base = c.packs.find(p => p.id === 'base'), got = base.keys.filter(k => c.dex[k]).length;
-    const cell = (k) => { const f = form(k), has = !!c.dex[k] || f.rarity === 'DIY';
+    const free = new Set(c.packs.filter(p => p.free).flatMap(p => p.keys));      // 带右键菜单的扩展包：里面的随时能选，不用先见过
+    const cell = (k) => { const f = form(k), has = !!c.dex[k] || f.rarity === 'DIY' || free.has(k);
       return `<div class="cell ${has ? 'has' : 'lock'} ${c.chosen === k ? 'on' : ''}" ${has ? `data-act="choose" data-form="${esc(k)}" title="见过 ${c.dex[k] || 0} 次"` : ''}>
         <span data-sprite="${esc(k)}"></span><i class="dot ${f.rarity}"></i>${has ? '' : '<div class="q">?</div>'}<div class="nm">${has ? esc(f.name) : '？？？'}</div></div>`; };
     return `<div class="card">${head(`图鉴 ${got}/${base.keys.length}`)}<div class="scroll">${c.packs.map(p => `
@@ -140,7 +141,8 @@ const VIEWS = {
       <div class="dex ${p.on ? '' : 'off'}">${p.keys.map(cell).join('')}</div>`).join('')}</div>
     <div class="bar"><span class="g">${c.chosen === 'random' ? '点一只，让它常驻' : `常驻：${esc(form(c.chosen).name)}`}</span><button class="${c.chosen === 'random' ? 'main' : ''}" data-act="choose" data-form="random">每次随机</button></div>
     <div class="caps">扭蛋${c.capsules.map(s => `<i class="${c.capsule === s.id ? 'on' : ''}" data-act="capsule" data-id="${esc(s.id)}">${esc(s.name)}</i>`).join('')}</div>
-    <div class="foot">${c.canAI ? '<span class="link" data-act="ai">AI 捏一只</span> · ' : ''}${c.canOpen ? '<span class="link" data-act="folder">团子文件夹</span> · ' : ''}普通 ${c.odds.N}% <span style="color:var(--r)">稀有 ${c.odds.R}%</span> <span style="color:var(--ssr)">隐藏 ${c.odds.SSR}%</span></div></div>`;
+    <div class="foot">${[c.canAI ? '<span class="link" data-act="ai">AI 捏一只</span>' : '', c.canAdd ? '<span class="link" data-act="pack-add">添加扩展包</span>' : '', c.canOpen ? '<span class="link" data-act="folder">扩展包文件夹</span>' : ''].filter(Boolean).join(' · ')}
+      <div>概率：普通 ${c.odds.N}% · <span style="color:var(--r)">稀有 ${c.odds.R}%</span> · <span style="color:var(--ssr)">隐藏 ${c.odds.SSR}%</span></div></div></div>`;
   },
   countdown: (c) => `<div class="card">${head('倒计时')}<div class="pad">
     ${c.items.length ? c.items.map((it, i) => `<div class="cd"><b>${esc(it.name)}</b><i>${esc(it.date)}</i><em>${it.n > 0 ? `还有 ${it.n} 天` : it.n === 0 ? '就是今天' : `过了 ${-it.n} 天`}</em><span class="del" data-act="cd-del" data-i="${i}">×</span></div>`).join('') : '<div class="empty">还没有。加一个考试 / DDL，团子每天帮你数日子</div>'}
@@ -214,7 +216,7 @@ box.addEventListener('click', (e) => {
 });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') act({ act: 'close' }); });
 api.on('show', render);
-// 自带以外的团子（团子包 / AI 捏的）：主进程发过来，这边也登记上才画得出来
+// 自带以外的团子（扩展包 / AI 捏的）：主进程发过来，这边也登记上才画得出来
 let extra = new Set();
 api.on('forms', ({ forms = {} }) => {
   for (const k of extra) if (!forms[k]) unregisterDango(k);

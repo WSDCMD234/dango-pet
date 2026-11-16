@@ -5,7 +5,9 @@
   #wrap { width: 128px; height: 128px; position: relative; cursor: grab; }
   #wrap:active { cursor: grabbing; }
   #hopper { position: absolute; left: 8px; top: 28px; width: 112px; height: 96px; transform-origin: 50% 100%; }
-  svg#pet { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; transform-origin: 50% 100%; transition: opacity .2s; }
+  svg#pet { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; transform-origin: 50% 100%; transition: filter .5s, opacity .2s; }
+  /* 整只变成一团白（白光出场 / 发光变身用）：先去掉对比度变成灰，再提亮成白；直接 brightness 会在过渡时闪一下灰 */
+  svg#pet.white { filter: contrast(0) brightness(2.2); }
   svg#pet.hidden { opacity: 0; transition: none; }
   #tail { transform-box: fill-box; transform-origin: 10% 100%; }
   #earL { transform-box: fill-box; transform-origin: 90% 100%; }
@@ -34,6 +36,11 @@
   #flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; border-radius: 50%;
     background: radial-gradient(circle at 50% 76%, #fff 0%, rgba(255,255,255,.9) 30%, rgba(255,255,255,0) 68%); }
   #ring { position: absolute; left: 39px; top: 62px; width: 50px; height: 50px; border: 3px solid #fff; border-radius: 50%; box-sizing: border-box; opacity: 0; pointer-events: none; }
+  /* 发光变身时身后的一团光 */
+  #aura { position: absolute; left: 14px; top: 26px; width: 100px; height: 100px; border-radius: 50%; pointer-events: none; opacity: 0; transform: scale(.4); transition: opacity .4s, transform .4s;
+    background: radial-gradient(circle, rgba(255,255,240,.95) 0%, rgba(255,250,210,.55) 45%, rgba(255,250,210,0) 70%); }
+  .aura #aura { opacity: 1; transform: scale(1); animation: aura .35s ease-in-out infinite alternate; }
+  @keyframes aura { to { transform: scale(1.12); } }
   #fx { position: absolute; inset: 0; pointer-events: none; }
   .p { position: absolute; width: 4px; height: 4px; }
   /* 扭蛋：48×48，平时落在窗口底部 */
@@ -62,6 +69,7 @@
 </style></head>
 <body>
 <div id="wrap" class="idle">
+  <div id="aura"></div>
   <svg id="orb" viewBox="0 0 12 12"></svg>
   <div id="hopper"><svg id="pet" class="hidden" viewBox="0 0 28 24"></svg></div>
   <div id="ring"></div>
@@ -81,17 +89,19 @@ const NS = 'http://www.w3.org/2000/svg';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const rnd = (a, b) => a + Math.random() * (b - a);
 const rarity = (k) => (DANGO_FORMS[k] || DANGO_FORMS.dango).rarity;
+// 这只团子所在的扩展包定的出场 / 变身方式：{ appear: 'flash', morph: 'glow' }，没定就是空的（蹦出来、翻硬币）
+const animOf = (k) => (DANGO_FORMS[k] || {}).anim || {};
 let form = 'dango', mood = 'idle', animating = false, started = false;
-let animKind = 'evolving', air = false, held = false, cheering = false;
+let animKind = 'evolving', air = false, held = false, cheering = false, aura = false;
 
 // 没事时团子待在扭蛋里不动；有事 / 点一下 / 专注时才出来
 let popFast = false, spin = 0, flying = false;
 let out = false, count = 0, chosen = 'random', next = 'dango', stay = false, band = false;
-let peekUntil = 0, peekForm = null, releaseAs = null, busy = false, lidAnim = null;
+let peekUntil = 0, peekForm = null, releaseAs = null, showOnce = null, busy = false, lidAnim = null;
 let dizzy = false, dizzyNext = false, cheerNext = null, lastHard = false, flyPeak = 0, hitMax = 0, throws = [], angryUntil = 0, fidgeting = false;
 
 function setClass() {
-  wrap.className = mood + (animating ? ' ' + animKind : '') + (air ? ' fly' : held ? ' held' : '') + (flying ? ' toss' : '') + (dizzy ? ' dizzy' : '') + (cheering ? ' cheer' : '') + (out ? ' out' : '');
+  wrap.className = mood + (animating ? ' ' + animKind : '') + (air ? ' fly' : held ? ' held' : '') + (flying ? ' toss' : '') + (dizzy ? ' dizzy' : '') + (cheering ? ' cheer' : '') + (out ? ' out' : '') + (aura ? ' aura' : '');
 }
 // 这只团子的几种代表色（放粒子用）
 function colors(k) {
@@ -156,20 +166,27 @@ function confetti(n) {
 
 // ---------- 扭蛋 ----------
 // 12×12 像素：下半实心底壳，上半玻璃罩，隔着玻璃能看见里面那只的脑袋；光标靠近它会睁眼看你
-let lid, capIn, capEyes, capGlow;
+// 样式里可以带：指示灯（单独一组，能亮）；上半不透明时「里面」的样子（躲在盖子后面，掀开才看得见）
+let lid, capIn, capEyes, capGlow, capLight;
 function drawCapsule(key) {
   orb.innerHTML = '';
+  const st = capStyle(), solid = st.glass === false;
   const mk = (id) => { const g = document.createElementNS(NS, 'g'); g.id = id; orb.appendChild(g); return g; };
-  const bot = mk('capBot'); capIn = mk('capIn'); lid = mk('capTop'); capEyes = mk('capEyes'); capGlow = mk('capGlow');
-  const px = (g, p, c) => { const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', p.x); r.setAttribute('y', p.y); r.setAttribute('width', 1); r.setAttribute('height', 1); r.setAttribute('fill', c || p.c); g.appendChild(r); };
-  for (const p of capsulePixels(key, { style: capStyle() })) {
+  const bot = mk('capBot'); capIn = mk('capIn');
+  if (solid) capEyes = mk('capEyes');      // 不透明：眼睛在盖子后面
+  lid = mk('capTop');
+  if (!solid) capEyes = mk('capEyes');     // 玻璃罩：眼睛画在玻璃前面，看得清
+  capGlow = mk('capGlow'); capLight = mk('capLight');
+  const px = (g, p, c) => { const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', p.x); r.setAttribute('y', p.y); r.setAttribute('width', 1); r.setAttribute('height', 1); r.setAttribute('fill', c || p.c); g.appendChild(r); return r; };
+  for (const p of capsulePixels(key, { style: st })) {
     if (p.part === 'bot') { px(bot, p); if (p.c !== CAP_PAL.o) px(capGlow, p, '#ffffff'); }
     else if (p.part === 'top') px(lid, p);
+    else if (p.part === 'light') px(capLight, p).dataset.c = p.c;
     else px(p.eye ? capEyes : capIn, p);
   }
   capEyes.style.display = awakeNow ? '' : 'none';
 }
-// 扭蛋样式：自带的几种 + 团子包里带的
+// 扭蛋样式：自带的几种 + 扩展包里带的
 let capId = 'orange', capExtra = {}, extraForms = new Set();
 const capStyle = () => DANGO_CAP_STYLES[capId] || capExtra[capId] || DANGO_CAP_STYLES.orange;
 // 样式换了：等手头的动画放完再重画，免得打断
@@ -197,10 +214,17 @@ function glint(color = '#ffffff', ms = 380) {
   for (const r of capGlow.children) r.setAttribute('fill', color);
   return capGlow.animate([{ opacity: 0 }, { opacity: .85, offset: .25 }, { opacity: 0 }], { duration: ms, easing: 'ease-out' });
 }
+// 指示灯（样式里用 light 标出来的那几格）：亮 / 灭；没有指示灯的样式什么也不做
+const hasLamp = () => !!(capLight && capLight.firstChild);
+function lamp(on) { if (!hasLamp()) return; const c = capStyle().lightOn || '#ff5a4e'; for (const r of capLight.children) r.setAttribute('fill', on ? c : r.dataset.c); }
+// 眨一下：有指示灯就闪灯，没有就底壳亮一下
+function wink() { if (!hasLamp()) return glint(); lamp(true); setTimeout(() => lamp(false), 190); }
+// 指示灯画在上半（盖子那半）的几格：显示 / 藏起来
+function lampTop(show) { if (capLight) for (const r of capLight.children) if (+r.getAttribute('y') < 6) r.style.visibility = show ? '' : 'hidden'; }
 const G = 'translateY(128px)'; // 扭蛋落地位置
 async function wobble(n) {
   for (let i = 0; i < n; i++) {
-    glint();
+    wink();
     await orb.animate([{ transform: `${G} rotate(0)` }, { transform: `${G} rotate(-22deg)` }, { transform: `${G} rotate(16deg)` }, { transform: `${G} rotate(0)` }],
       { duration: 400, easing: 'ease-in-out' }).finished;
     if (i < n - 1) await sleep(240);
@@ -226,7 +250,8 @@ async function dropBall() {
   animating = false; setClass();
 }
 
-// 开扭蛋：晃一晃、掀盖、「啵」地蹦出一只团子
+// 开扭蛋：晃一晃、掀盖、「啵」地蹦出一只团子。
+// 这只所在的扩展包写了 appear: flash 的话，换成白光出场：一团白色的轮廓从扭蛋里涨出来，站稳了再显出颜色
 async function release(f) {
   animating = true; animKind = 'entering'; setClass();
   orb.style.display = 'block'; orb.style.opacity = 1;
@@ -234,48 +259,63 @@ async function release(f) {
   hopper.style.transform = ''; hopper.style.transformOrigin = ''; tumble = 0; air = false;
   if (popFast) { if (settle) { await settle.finished.catch(() => { }); settle = null; await sleep(150); } popFast = false; orb.style.transform = G; orb.style.transformOrigin = ''; spin = 0; }
   else await wobble(count > 0 || stay ? 1 : 2);
+  lamp(true);                                   // 有指示灯的：开盖前亮起来
   await sleep(100);
   await openLid();
   api.send('pet-seen', f);
-  const rar = rarity(f), ssr = rar === 'SSR';
-  flash(ssr ? 900 : 480); ring(ssr ? 900 : 650);
-  burst(ssr ? 30 : 18, ssr ? GOLD : colors(f), { cy: 98, r1: ssr ? 86 : 68 });
+  const rar = rarity(f), ssr = rar === 'SSR', beam = animOf(f).appear === 'flash';
+  flash(ssr ? 900 : beam ? 620 : 480); ring(ssr ? 900 : 650);
+  burst(ssr ? 30 : 18, ssr ? GOLD : colors(f), { cy: beam ? 104 : 98, r1: ssr ? 86 : 68 });
   capInside(null);
   const fade = orb.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 240, fill: 'forwards' });
   form = f; paint(f);
+  if (beam) { svg.classList.add('white'); void svg.getBoundingClientRect(); }      // 还藏着的时候先变白（这时没有过渡），不然会看到颜色一闪
   svg.classList.remove('hidden');
   out = true; setClass(); api.send('pet-out', true); reportShape();
-  await svg.animate([
+  if (beam) await svg.animate([{ transform: 'scale(.1)' }, { transform: 'scale(1.1, .9)', offset: .6 }, { transform: 'scale(.95, 1.06)', offset: .8 }, { transform: 'scale(1)' }], { duration: 520, easing: 'ease-out' }).finished;
+  else await svg.animate([
     { transform: 'translateY(10px) scale(.12)', easing: 'cubic-bezier(.2,.8,.4,1)' },
     { transform: 'translateY(-22px) scale(.9, 1.1)', offset: .42, easing: 'cubic-bezier(.5,0,.8,.4)' },
     { transform: 'translateY(0) scale(1.15, .85)', offset: .72 },
     { transform: 'translateY(-4px) scale(.97, 1.04)', offset: .87 },
     { transform: 'scale(1)' }], { duration: 640 }).finished;
   await fade.finished;
-  orb.style.display = 'none'; fade.cancel(); if (lidAnim) { lidAnim.cancel(); lidAnim = null; }
+  orb.style.display = 'none'; fade.cancel(); if (lidAnim) { lidAnim.cancel(); lidAnim = null; } lamp(false);
+  svg.classList.remove('white');
   twinkle(rar === 'N' ? 5 : 10, ssr ? GOLD : colors(f));
-  await sleep(360);
+  await sleep(beam ? 450 : 360);
   animating = false; setClass();
   if (dizzyNext) { dizzyNext = false; dizzyFx(); } else if (cheerNext) { const c = cheerNext; cheerNext = null; cheer(c.big); } else wagTail();
 }
 
-// 回扭蛋：扭蛋开着盖出现，团子蹲一下、跳起来扎进去，合盖；在里面又换了个样
+// 回扭蛋：扭蛋开着盖出现，团子蹲一下、跳起来扎进去，合盖；在里面又换了个样。
+// 白光出场的那种（appear: flash）回去也是白光：整只变白，缩成一个点被吸进扭蛋
 async function recall() {
   animating = true; animKind = 'entering'; setClass();
   orb.style.display = 'block'; capInside(null); awake(false);
   openLid(1);
   await orb.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200 }).finished;
-  const dive = svg.animate([
-    { transform: 'scale(1)' },
-    { transform: 'scale(1.12, .86)', offset: .24, easing: 'cubic-bezier(.2,.8,.4,1)' },
-    { transform: 'translateY(-26px) scale(.78, .96)', offset: .58, easing: 'cubic-bezier(.6,0,.9,.5)' },
-    { transform: 'translateY(6px) scale(.1)', opacity: .7 }], { duration: 540, fill: 'forwards' });
-  setTimeout(() => burst(8, colors(form), { cy: 102, r1: 38, dur: 300, out: false, size: 3 }), 320);
-  await dive.finished;
-  svg.classList.add('hidden'); dive.cancel();
-  out = false; setClass(); api.send('pet-out', false); reportShape();
+  if (animOf(form).appear === 'flash') {
+    lamp(true); svg.classList.add('white');
+    await sleep(320);
+    burst(10, [capStyle().lightOn || '#ffe08a', '#ffffff', '#fff6c8'], { cy: 104, r1: 46, dur: 380, out: false });
+    const shrink = svg.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'translateY(-12px) scale(.08)', opacity: .5 }], { duration: 380, easing: 'ease-in', fill: 'forwards' });
+    await shrink.finished;
+    svg.classList.add('hidden'); shrink.cancel(); svg.classList.remove('white');
+  } else {
+    const dive = svg.animate([
+      { transform: 'scale(1)' },
+      { transform: 'scale(1.12, .86)', offset: .24, easing: 'cubic-bezier(.2,.8,.4,1)' },
+      { transform: 'translateY(-26px) scale(.78, .96)', offset: .58, easing: 'cubic-bezier(.6,0,.9,.5)' },
+      { transform: 'translateY(6px) scale(.1)', opacity: .7 }], { duration: 540, fill: 'forwards' });
+    setTimeout(() => burst(8, colors(form), { cy: 102, r1: 38, dur: 300, out: false, size: 3 }), 320);
+    await dive.finished;
+    svg.classList.add('hidden'); dive.cancel();
+  }
+  out = false; showOnce = null; setClass(); api.send('pet-out', false); reportShape();
   capInside(form);
   await closeLid();
+  lamp(false);
   await sleep(120);
   const w = wobble(1);
   setTimeout(() => capInside(next), 210);
@@ -289,8 +329,8 @@ async function reconcile() {
   try {
     for (let guard = 0; guard < 6; guard++) {
       const wantOut = count > 0 || stay || Date.now() < peekUntil;
-      // 有待办时一律是原味团子；选了常驻形态就是它；否则谁出来了就是谁
-      const want = count > 0 ? 'dango' : (chosen !== 'random' ? chosen : null);
+      // 有待办时一律是原味团子；选了常驻形态就是它；否则谁出来了就是谁（showOnce：在外面时被点名要变成谁，变一次给你看）
+      const want = count > 0 ? 'dango' : (chosen !== 'random' ? chosen : DANGO_FORMS[showOnce] ? showOnce : null);
       if (wantOut && !out) { const f = releaseAs || want || (Date.now() < peekUntil && peekForm) || next; releaseAs = null; await release(f); }
       else if (!wantOut && out) await recall();
       else if (wantOut && out && want && form !== want) await morph(want, count > 0 ? 'quick' : 'full');
@@ -304,6 +344,7 @@ function peek(f, ms) { peekForm = f; peekUntil = Date.now() + ms; reconcile(); }
 // ---------- 变身：像翻硬币一样转，每转半圈换一次样子，越转越快，最后「嘭」地停在新的那只 ----------
 const FLIPS = { full: [240, 200, 170, 140, 115, 95, 80], quick: [130, 100, 80] };
 async function morph(to, level) {
+  if (animOf(to).morph === 'glow') return glowMorph(to, level);
   animating = true; animKind = 'evolving'; setClass();
   const from = form, steps = FLIPS[level];
   if (level !== 'quick') burst(16, ['#fff', '#fff6c8', '#ffe08a'], { cy: 82, r0: 0, r1: 64, dur: 480, out: false });
@@ -320,6 +361,31 @@ async function morph(to, level) {
   await svg.animate([{ transform: 'scale(1.14, .84)' }, { transform: 'scale(.94, 1.07)', offset: .5 }, { transform: 'scale(1)' }], { duration: 380, easing: 'ease-out' }).finished;
   if (level !== 'quick') twinkle(9, colors(to), 1000);
   await sleep(level === 'quick' ? 200 : 600);
+  animating = false; setClass();
+  if (level !== 'quick') wagTail();
+}
+// ---------- 发光变身（扩展包写了 morph: glow）：整只变白、身后亮起一团光，新旧两个轮廓交替着闪，越闪越快，最后炸开、显出新的颜色 ----------
+const GLOWS = { full: [420, 360, 300, 250, 210, 175, 145, 120, 100, 85, 70, 60, 50, 45, 40, 40, 40, 40], quick: [130, 100, 75, 55, 45] };
+async function glowMorph(to, level) {
+  animating = true; animKind = 'evolving'; aura = level !== 'quick'; setClass();
+  const from = form, steps = GLOWS[level];
+  svg.classList.add('white');
+  if (level !== 'quick') burst(20, ['#fff', '#fff6c8', '#ffe08a'], { cy: 82, r0: 0, r1: 64, dur: 650, out: false });
+  await sleep(level === 'quick' ? 250 : 650);
+  for (let i = 0; i < steps.length; i++) {
+    const isNew = i % 2 === 0;
+    paint(isNew ? to : from);
+    svg.style.transform = isNew ? 'scale(1.06, 1.08)' : 'scale(.84, .9)';
+    await sleep(steps[i]);
+  }
+  paint(to); form = to; svg.style.transform = ''; reportShape();
+  aura = false; setClass();
+  flash(level === 'quick' ? 350 : 650); ring(level === 'quick' ? 450 : 750);
+  burst(level === 'full' ? 26 : 14, colors(to), { r1: level === 'full' ? 76 : 58 });
+  await svg.animate([{ transform: 'scale(1.1, .85)' }, { transform: 'scale(.94, 1.06)', offset: .5 }, { transform: 'scale(1)' }], { duration: 380, easing: 'ease-out' }).finished;
+  svg.classList.remove('white');
+  if (level !== 'quick') twinkle(9, colors(to), 1000);
+  await sleep(level === 'quick' ? 300 : 700);
   animating = false; setClass();
   if (level !== 'quick') wagTail();
 }
@@ -372,12 +438,13 @@ api.on('pet-timer', setTimer);
 // 让它自己出来待一会儿（提醒时用）
 api.on('pet-peek', ({ ms, form: f }) => {
   if (count > 0) return;
-  if (out) { peekUntil = Math.max(peekUntil, Date.now() + ms); return; }
+  // 已经在外面：多待一会儿；点了名的（刚装的扩展包 / 刚捏好的新团子）就当场变成它给你看
+  if (out) { peekUntil = Math.max(peekUntil, Date.now() + ms); if (f && DANGO_FORMS[f]) { showOnce = f; reconcile(); } return; }
   if (animating || Date.now() < angryUntil) return;
-  if (f && DANGO_FORMS[f]) { releaseAs = f; capInside(f); }      // 指定这次出来的是谁（刚捏好的新团子）
+  if (f && DANGO_FORMS[f]) { releaseAs = f; capInside(f); }      // 指定这次出来的是谁
   peek(f && DANGO_FORMS[f] ? f : next, ms);
 });
-// 自带以外的团子和扭蛋样式（团子包 / AI 捏的）：主进程发过来，这边登记上才画得出来
+// 自带以外的团子和扭蛋样式（扩展包 / AI 捏的）：主进程发过来，这边登记上才画得出来
 api.on('forms', ({ forms = {}, capsules = {} }) => {
   for (const k of extraForms) if (!forms[k]) unregisterDango(k);
   extraForms = new Set(Object.keys(forms));
@@ -487,7 +554,7 @@ api.on('pet-land', () => {
   dizzyNext = lastHard; popFast = true; peek(next, 6000);
 });
 // 点一下扭蛋：开出一只团子，几秒后自己回去
-function pokeBall() {
+function pokeCapsule() {
   if (count > 0 || out || animating) return;
   if (Date.now() < angryUntil) return sulk();
   peek(next, 5200);
@@ -521,24 +588,28 @@ async function sulk() {
     for (const [x, y, w, h] of [[0, 2, 3, 1], [2, 0, 1, 3], [4, 2, 3, 1], [4, 0, 1, 3], [0, 4, 3, 1], [2, 4, 1, 3], [4, 4, 3, 1], [4, 4, 1, 3]]) { const r = document.createElementNS(NS, 'rect'); r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w); r.setAttribute('height', h); r.setAttribute('fill', '#e5372f'); m.appendChild(r); }
     m.style.left = '90px'; m.style.top = '66px'; fx.appendChild(m);
     m.animate([{ transform: 'scale(0)' }, { transform: 'scale(1.3)', offset: .2 }, { transform: 'scale(1)', offset: .35 }, { transform: 'scale(1.15)', offset: .6 }, { transform: 'scale(0)' }], { duration: 1300 }).onfinish = () => m.remove();
-    glint('#ff3b30', 900);
+    glint('#ff3b30', 900); lamp(true);
     await orb.animate([0, 8, -8, 7, -7, 6, -6, 4, -4, 0].map(a => ({ transform: G + ' translateX(' + a / 4 + 'px) rotate(' + a + 'deg)' })), { duration: 600 }).finished;
     await sleep(200);
-  } finally { sulking = false; }
+  } finally { sulking = false; lamp(false); }
 }
 // 盖子掀条缝，里面那只探头眨一下眼（ms 后合上）
 async function crack(ms) {
   fidgeting = true;
   try {
     awake(true);
-    const rise = [capIn, capEyes].map(g => g.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-1px)' }], { duration: 200, fill: 'forwards' }));
+    // 玻璃罩的：里面那只往上探一格。不透明的：里面是暗的，只露一双眼睛（不往上探，不然底下会漏出一条缝）；
+    // 指示灯画在上半的那几格会挡在两只眼睛中间，偷看时先藏起来
+    const solid = capStyle().glass === false;
+    if (solid) lampTop(false);
+    const rise = solid ? [] : [capIn, capEyes].map(g => g.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-1px)' }], { duration: 200, fill: 'forwards' }));
     if (lidAnim) lidAnim.cancel();
     lidAnim = lid.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(-30deg) translateY(-1px)' }], { duration: 260, easing: 'ease-out', fill: 'forwards' });
     await lidAnim.finished.catch(() => { });
     await sleep(ms * .5); capEyes.style.opacity = 0; await sleep(130); capEyes.style.opacity = 1; await sleep(ms * .5);
     rise.forEach(a => a.cancel());
     if (!out && !animating) await closeLid(200, -30);
-  } finally { fidgeting = false; }
+  } finally { fidgeting = false; lampTop(true); }
 }
 // ① 没事时每 1~2.5 分钟自己动一下：晃一下 / 亮一下 / 原地蹦一下 / 睁眼左右看看 / 掀盖偷看
 let nextFidget = Date.now() + 40000;
@@ -548,7 +619,7 @@ async function fidget(r = Math.random()) {
   fidgeting = true;
   try {
     if (r < .25) await wobble(1);
-    else if (r < .4) glint();
+    else if (r < .4) wink();
     else if (r < .6) { awake(true, -1); await sleep(600); awake(true, 1); await sleep(600); awake(true, 0); await sleep(400); awake(false); }
     else await orb.animate([{ transform: G }, { transform: G + ' scale(1.1, .9)', offset: .2 }, { transform: 'translateY(114px) scale(.95, 1.05)', offset: .5 }, { transform: G + ' scale(1.06, .94)', offset: .8 }, { transform: G }], { duration: 520, easing: 'ease-out' }).finished;
   } finally { fidgeting = false; }
@@ -608,7 +679,7 @@ window.addEventListener('pointercancel', () => endDrag('cancel'), true);
 window.addEventListener('pointermove', (e) => { if (down && !(e.buttons & 1)) endDrag('move-no-button'); }, true);
 wrap.addEventListener('lostpointercapture', () => { if (down) plog('lostpointercapture (ignored)'); });
 window.addEventListener('blur', () => { if (down) plog('blur (ignored)'); });
-api.on('pet-poke', () => pokeBall());
+api.on('pet-poke', () => pokeCapsule());
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); api.send('pet-menu'); });
 window.addEventListener('error', (e) => plog('error', e.message, e.lineno));
 </script>

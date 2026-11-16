@@ -1,0 +1,61 @@
+{
+  "name": "天气团子",
+  "id": "weather",
+  "menu": "换天气",
+  "appear": "flash",
+  "morph": "glow",
+  "capsule": {
+    "name": "星空球",
+    "glass": false,
+    "light": "j",
+    "lightOn": "#ffe066",
+    "inside": { "bg": "#141a3a", "eye": "#ffe066" },
+    "pal": { "o": "#232b57", "n": "#3f4fa0", "m": "#8fa0ee", "y": "#ffe066", "s": "#232b57", "j": "#6b79b8", "c": "#e9eef7", "k": "#c3cde0", "t": "#ffffff" },
+    "rows": [
+      "....oooo....",
+      "..oonnnnoo..",
+      ".onmmnnynno.",
+      ".onmnnnnnno.",
+      "onnynnnnnnno",
+      "onnnnnnnynno",
+      "osssjjjjssso",
+      "otccccccccko",
+      ".otccccccko.",
+      ".occcccckko.",
+      "..ookkkkoo..",
+      "....oooo...."
+    ]
+  },
+  "dangos": [
+    {
+      "name": "晴天团子",
+      "say": "今天不用带伞",
+      "lines": ["晒晒太阳去", "被子该晒了"],
+      "colors": { "outline": "#8a5a00", "body": "#ffd54a", "belly": "#fff3b0", "accent": "#ff9a3c" },
+      "topper": ["a..a..a", ".aaaaa.", "aaaaaaa"]
+    },
+    {
+      "name": "多云团子",
+      "say": "太阳躲起来了",
+      "lines": ["适合发呆", "云在赶路"],
+      "colors": { "outline": "#5f6b7a", "body": "#eef2f6", "belly": "#ffffff", "accent": "#aab6c4" },
+      "topper": ["..aaa...", ".aaaaaa.", "aaaaaaaa"]
+    },
+    {
+      "name": "下雨团子",
+      "say": "记得带伞",
+      "lines": ["滴答滴答", "雨天适合写作业"],
+      "colors": { "outline": "#2d4a6e", "body": "#8fbfee", "belly": "#d6e9fb", "accent": "#e5484d" },
+      "topper": ["..aaaa..", ".aaaaaa.", "aaaaaaaa", "....n..."],
+      "marks": [[6, 12, "#ffffff", 1, 2], [16, 11, "#ffffff", 1, 2], [21, 13, "#ffffff", 1, 2]]
+    },
+    {
+      "name": "下雪团子",
+      "say": "可以堆雪人了",
+      "lines": ["阿嚏", "多穿一件"],
+      "colors": { "outline": "#4a6a8a", "body": "#dff1fb", "belly": "#ffffff", "accent": "#7fc8ee", "eye": "#2b3a4a" },
+      "topper": ["...w...", "..rrr..", ".rrrrr.", "wwwwwww"],
+      "marks": [[5, 12, "#7fc8ee"], [9, 10, "#7fc8ee"], [18, 10, "#7fc8ee"], [22, 13, "#7fc8ee"]]
+    }
+  ]
+}

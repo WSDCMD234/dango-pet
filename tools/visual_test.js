@@ -1,6 +1,6 @@
 // 看得见的自测：让真程序在离屏窗口里把各种动作演一遍，逐帧截成拼图，人（或 AI）看图检查
 // 用法（PowerShell）：$env:DANGO_TEST='tools/visual_test.js'; $env:DANGO_OUT='输出目录'; node_modules\electron\dist\electron.exe .
-// 可选 DANGO_ONLY=start,poke,throw,...  只跑其中几段
+// 可选 DANGO_ONLY=start,poke,throw,...  只跑其中几段；DANGO_PACK=某个扩展包.json  让 ext 那一段改用你自己的包
 const fs = require('fs');
 const path = require('path');
 const { Canvas } = require('./lib/png');
@@ -126,7 +126,7 @@ module.exports = async function ({ app, core, cfg, pet, bubble, DATA, host }) {
     core.hideBubble();
   });
   await run('mod', async () => {
-    // 改装：AI 捏团子（接口用假的顶替，1.5 秒后回一份配方）、图鉴里的团子包和扭蛋样式、打赏
+    // 改装：AI 捏团子（接口用假的顶替，1.5 秒后回一份配方）、图鉴里的扩展包和扭蛋样式、打赏
     const LEMON = { name: '柠檬团子', say: '酸得眯眼，提神', lines: ['来一口？', '维 C 拉满'], colors: { outline: '#7a6410', body: '#ffe14d', belly: '#fff6b0', accent: '#6fbf3f', accent2: '#ffffff', eye: '#2b1d10' }, belly: true, ears: 'none', tail: 'none', pattern: 'none',
       topper: ['..aa..', '.aaaa.', '..n...'], marks: [], front: [{ x: 6, y: 14, w: 5, h: 3, color: '#26262e' }, { x: 17, y: 14, w: 5, h: 3, color: '#26262e' }, { x: 11, y: 15, w: 6, h: 1, color: '#26262e' }] };
     let ready = false;
@@ -148,6 +148,37 @@ module.exports = async function ({ app, core, cfg, pet, bubble, DATA, host }) {
     core.bubbleMessage('bubble-action', { act: 'capsule', id: 'mint' }); await wait(1200); await series('16_capsule_mint', 300, 150, 2);
     core.menuModel().find(m => m.label === '请团子喝杯奶茶').click(); await shotBubble('donate');
     core.hideBubble();
+  });
+  await run('ext', async () => {
+    // 扩展包：右键「添加扩展包…」（选文件那一步直接给它例子包）→ 白光出场 → 右键菜单里换一只（发光变身）→ 白光收回 → 掀盖偷看 → 生气亮灯
+    const file = process.env.DANGO_PACK || path.join(__dirname, '..', 'examples', 'packs', '天气团子.json');
+    host.packs.pick = async () => host.packs.add(file);
+    cfg.set({ dnd: true });                       // 这一段里别让每日问候 / 休息提醒冒出来抢话
+    await js('peekUntil = 0'); await wait(only ? 300 : 3200);
+    core.menuModel().find(m => m.label === '添加扩展包…').click();
+    const s = series('17_ext_add', 4300, 110);
+    await wait(3400); await shotBubble('ext_added');
+    await s;
+    const p = core.packs().find(x => x.menu), sub = core.menuModel().find(m => m.label === p.menu).submenu;
+    note('menu', p.menu, sub.map(x => (x.checked ? '*' : '') + x.label).join(' | '));
+    sub[3].click();
+    await wait(300);
+    await series('18_ext_morph', 5400, 130);
+    await js('peekUntil = 0');
+    await series('19_ext_recall', 2800, 110);
+    const s2 = series('20_ext_peek', 3400, 170);
+    for (let i = 0; i < 36; i++) { pet().webContents.send('pet-cursor', { dx: 2, dy: -20, d: 5 }); await wait(80); }
+    pet().webContents.send('pet-cursor', { dx: 0, dy: 0, d: 500 });
+    await s2;
+    await js('angryUntil = Date.now() + 2500; sulk(); 0');
+    await series('21_ext_sulk', 1100, 110);
+    await wait(2200);
+    // 团子在外面的时候再添加一次：不用回扭蛋，当场变成包里第一只
+    core.choose('random'); pet().webContents.send('pet-poke'); await wait(3200);
+    core.menuModel().find(m => m.label === '添加扩展包…').click();
+    await series('22_ext_add_while_out', 5600, 140);
+    core.bubbleMessage('bubble-action', { act: 'dex' }); await shotBubble('ext_dex');
+    core.hideBubble(); cfg.set({ dnd: false });
   });
   note('done');
   app.quit();
